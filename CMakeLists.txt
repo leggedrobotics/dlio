@@ -10,13 +10,14 @@
 #                                                         #
 ###########################################################
 
-cmake_minimum_required(VERSION 3.12.4)
+cmake_minimum_required(VERSION 3.4)
 project(direct_lidar_inertial_odometry)
 
 add_compile_options(-std=c++17)
 set(CMAKE_BUILD_TYPE "Release")
 
-find_package( PCL REQUIRED )
+# PCL 1.10 is standard on Ubuntu 20.04
+find_package(PCL 1.10 EXACT REQUIRED PATHS /usr/include/pcl-1.10/)
 include_directories(${PCL_INCLUDE_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 link_directories(${PCL_LIBRARY_DIRS})
