@@ -37,6 +37,7 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
   this->kf_pose_pub  = this->nh.advertise<geometry_msgs::PoseArray>("kf_pose", 1, true);
   this->kf_cloud_pub = this->nh.advertise<sensor_msgs::PointCloud2>("kf_cloud", 1, true);
   this->deskewed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed", 1, true);
+  this->deskewed_but_not_transformed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed_original", 1, true);
 
   this->publish_timer = this->nh.createTimer(ros::Duration(0.01), &dlio::OdomNode::publishPose, this);
 
@@ -445,13 +446,21 @@ void dlio::OdomNode::publishCloud(pcl::PointCloud<PointType>::ConstPtr published
 
   pcl::PointCloud<PointType>::Ptr deskewed_scan_t_ (boost::make_shared<pcl::PointCloud<PointType>>());
 
+
+  sensor_msgs::PointCloud2 deskewed_original_ros;
+  pcl::toROSMsg(*published_cloud, deskewed_original_ros);
+  deskewed_original_ros.header.stamp = this->scan_header_stamp;
+  deskewed_original_ros.header.frame_id = "hesai_lidar";//this->odom_frame;
+  this->deskewed_but_not_transformed_pub.publish(deskewed_original_ros);
+
+
   pcl::transformPointCloud (*published_cloud, *deskewed_scan_t_, T_cloud);
 
   // published deskewed cloud
   sensor_msgs::PointCloud2 deskewed_ros;
   pcl::toROSMsg(*deskewed_scan_t_, deskewed_ros);
   deskewed_ros.header.stamp = this->scan_header_stamp;
-  deskewed_ros.header.frame_id = this->odom_frame;
+  deskewed_ros.header.frame_id = "oodom";//this->odom_frame;
   this->deskewed_pub.publish(deskewed_ros);
 
 }
@@ -517,6 +526,7 @@ void dlio::OdomNode::getScanFromROS(const sensor_msgs::PointCloud2ConstPtr& pc) 
       this->sensor = dlio::SensorType::VELODYNE;
       break;
     } else if (field.name == "timestamp" && original_scan_->points[0].timestamp < 1e14) {
+      // ROS_INFO("Detected sensor type: Hesai");
       this->sensor = dlio::SensorType::HESAI;
       break;
     } else if (field.name == "timestamp" && original_scan_->points[0].timestamp > 1e14) {
@@ -1831,7 +1841,7 @@ void dlio::OdomNode::debug() {
   }
   this->length_traversed = length_traversed;
 
-  // Average computation time
+  // Average computation time test
   double avg_comp_time =
     std::accumulate(this->comp_times.begin(), this->comp_times.end(), 0.0) / this->comp_times.size();
 

@@ -12,14 +12,23 @@
 
 <launch>
 
-  <arg name="robot_namespace" default="robot"/>
-  <arg name="rviz" default="false"/>
+  <arg name="robot_namespace" default=""/>
+  <arg name="rviz" default="true"/>
 
-  <arg name="pointcloud_topic" default="lidar"/>
-  <arg name="imu_topic" default="imu"/>
+  <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
+  <!-- /gt_box/livox/imu_si_compliant -->
+  <!-- <arg name="pointcloud_topic" default="/gt_box/livox/lidar"/> -->
+  <!-- <arg name="pointcloud_topic" default="/gt_box/livox/lidar"/> -->
+  <arg name="imu_topic" default="/gt_box/livox/imu_si_compliant"/>  
+  <!-- /sensors/imu /gt_box/cpt7/offline_from_novatel_logs/imu /gt_box/alphasense_driver_node/imu /gt_box/ap20/imu /gt_box/livox/imu  (/gt_box/livox/imu_si_compliant)  /gt_box/adis16475_node/imu /gt_box/stim320/imu   ((?(DONT USEEE /gt_box/cpt7/gps/imu))))  /gt_box/zed2i/zed_node/imu/data-->
+
+  <arg name="use_sim_time" default="true"/>
+
+  <!-- ROS Param -->
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
 
   <!-- DLIO Odometry Node -->
-  <node ns="$(arg robot_namespace)" name="dlio_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" output="screen" clear_params="true">
+  <node name="dlio_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" output="screen" clear_params="true">
 
     <!-- Load parameters -->
     <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio.yaml" command="load"/>
@@ -40,7 +49,7 @@
   </node>
 
   <!-- DLIO Mapping Node -->
-  <node ns="$(arg robot_namespace)" name="dlio_map" pkg="direct_lidar_inertial_odometry" type="dlio_map_node" output="screen" clear_params="true">
+  <node name="dlio_map" pkg="direct_lidar_inertial_odometry" type="dlio_map_node" output="screen" clear_params="true">
 
     <!-- Load parameters -->
     <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio.yaml" command="load"/>

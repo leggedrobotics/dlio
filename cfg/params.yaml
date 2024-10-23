@@ -13,17 +13,17 @@
 dlio:
 
   frames:
-    odom: odom
-    baselink: base_link
-    lidar: lidar
-    imu: imu
+    odom: oodom
+    baselink: bbase
+    lidar: dlio_lidar
+    imu: dlio_imu
 
   map:
-    waitUntilMove: true
+    waitUntilMove: false
     dense:
       filtered: false
     sparse:
-      leafSize: 0.25
+      leafSize: 0.1
 
   odom:
 
@@ -42,11 +42,11 @@ dlio:
       cropBoxFilter:
         size: 1.0
       voxelFilter:
-        res: 0.25
+        res: 0.1
 
     keyframe:
-      threshD: 1.0
-      threshR: 45.0
+      threshD: 0.1
+      threshR: 5.0
 
     submap:
       keyframe:
