@@ -2,7 +2,36 @@
 
 ## Sensor Configurations
 
+All sensor combinations (IMUs + Hesai/Livox) are supported. Currently, a seperate launch file exist for STIM + HesaiXT-32 combo but rest will be added.
+
+## How to build?
+
+Note: make sure to configure your catkin workspace after `catkin init` with `catkin config -DCMAKE_BUILD_TYPE=Release` such that the code is optimized.
+
+
+`catkin build direct_lidar_inertial_odometry` and source with `source devel/setup.bash`
+
 ## How to Run?
+Example setup for STIM320 + HesaiXT32
+
+`roslaunch direct_lidar_inertial_odometry dlio_hesai_stim.launch` this wil launch an rviz window.
+
+Expects `/gt_box/stim320/imu` and `/gt_box/hesai/points` to be available. So play your favorite bag.
+
+Important outputs:
+
+`/dlio_odom/deskewed_original` this is the deskewed point cloud. Same timestamp as the original cloud, and frame. The difference is that the motion compansation has been performed and it can be used for other applications.
+
+`/dlio_odom/registration_path` the path that the LiDAR took in the odometry frame.
+
+`/dlio_odom/registration_odom` the odometry message. Reads as pose of LiDAR frame in Odometry frame.
+
+`/tf` , the odometry node add the odometry frame as a child of LiDAR to respect the tree structure. You can accumulate the clouds using this frame.
+
+Note: if you want to change to a different sensor you need too adapt the extrinsic available in `dlio.yaml` and change the topic names / read parameter files accordingly.
+
+Note: After the destruction of the node, the mapper will automatically save a voxel map to the package directory.
+
 
 # Direct LiDAR-Inertial Odometry: Lightweight LIO with Continuous-Time Motion Correction
 
