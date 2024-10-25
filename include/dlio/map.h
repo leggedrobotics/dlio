@@ -40,7 +40,7 @@ private:
   pcl::PointCloud<PointType>::Ptr dlio_map;
   pcl::VoxelGrid<PointType> voxelgrid;
 
-  std::string odom_frame;
+  std::string map_frame;
 
   double leaf_size_;
 

@@ -33,6 +33,7 @@
 #include <string>
 #include <sys/times.h>
 #include <sys/vtimes.h>
+#include <filesystem>
 #include <thread>
 #include <malloc.h>
 
@@ -46,6 +47,8 @@ std::string to_string_with_precision(const T a_value, const int n = 6)
 }
 
 // ROS
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/PoseStamped.h>

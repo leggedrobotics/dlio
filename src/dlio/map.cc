@@ -36,11 +36,23 @@ dlio::MapNode::~MapNode() {
   pcl::PointCloud<PointType>::Ptr (boost::make_shared<pcl::PointCloud<PointType>>(*this->dlio_map));
 
   float leaf_size = 0.01;
-  std::string p;
-  p = ros::package::getPath("direct_lidar_inertial_odometry");
+  std::string p = ros::package::getPath("direct_lidar_inertial_odometry") + "/data";
+  
   if (p.empty()) {
     std::cout << "Could not get package path using ros::package::getPath." << std::endl;
     return;
+  }
+
+  if (!std::filesystem::exists(p.c_str()))
+  {
+    std::filesystem::create_directories(p);
+
+    // set the permissions of the newly created directory
+    std::filesystem::permissions(
+        p,
+        std::filesystem::perms::owner_all | std::filesystem::perms::group_all,
+        std::filesystem::perm_options::add
+    );
   }
 
   if (!std::filesystem::is_directory(p)) {
@@ -69,7 +81,7 @@ dlio::MapNode::~MapNode() {
 
 void dlio::MapNode::getParams() {
 
-  ros::param::param<std::string>("~dlio/odom/odom_frame", this->odom_frame, "odom");
+  ros::param::param<std::string>("~dlio/odom/map_frame", this->map_frame, "dlio_map");
   ros::param::param<double>("~dlio/map/sparse/leafSize", this->leaf_size_, 0.5);
 
   // Get Node NS and Remove Leading Character
@@ -80,7 +92,7 @@ void dlio::MapNode::getParams() {
     ns.erase(0,1);
 
     // Concatenate Frame Name Strings
-    this->odom_frame = ns + "/" + this->odom_frame;
+    this->map_frame = ns + "/" + this->map_frame;
   }
 }
 
@@ -109,7 +121,7 @@ void dlio::MapNode::callbackKeyframe(const sensor_msgs::PointCloud2ConstPtr& key
       sensor_msgs::PointCloud2 map_ros;
       pcl::toROSMsg(*this->dlio_map, map_ros);
       map_ros.header.stamp = ros::Time::now();
-      map_ros.header.frame_id = this->odom_frame;
+      map_ros.header.frame_id = this->map_frame;
       this->map_pub.publish(map_ros);
     }
   }

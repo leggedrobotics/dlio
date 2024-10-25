@@ -13,6 +13,7 @@
 dlio:
 
   frames:
+    map: dlio_map
     odom: dlio_odom
     lidar: hesai_lidar
     imu: dlio_imu

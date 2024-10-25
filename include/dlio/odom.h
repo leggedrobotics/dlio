@@ -82,6 +82,11 @@ private:
 
   void debug();
 
+  bool save_replayed_topics_to_rosbag_ = false;
+  rosbag::Bag outputBag;
+  mutable std::mutex rosbagMutex_;
+  tf2_ros::TransformBroadcaster br;
+
   ros::NodeHandle nh;
   ros::Timer publish_timer;
 
@@ -141,8 +146,11 @@ private:
 
   // Frames
   std::string odom_frame;
+  std::string map_frame;
   std::string lidar_frame;
   std::string imu_frame;
+
+  bool enableKeyFraming_ = true;
 
   // Preprocessing
   pcl::CropBox<PointType> crop;
@@ -210,7 +218,8 @@ private:
   }; Extrinsics extrinsics;
 
   // IMU
-  ros::Time imu_stamp;
+  ros::Time old_imu_stamp_for_tf = ros::Time(0);
+  ros::Time imu_stamp = ros::Time(0);
   double first_imu_stamp;
   double prev_imu_stamp;
   double imu_dp, imu_dq_deg;
