@@ -13,9 +13,8 @@
 dlio:
 
   frames:
-    odom: oodom
-    baselink: bbase
-    lidar: dlio_lidar
+    odom: dlio_odom
+    lidar: hesai_lidar
     imu: dlio_imu
 
   map:

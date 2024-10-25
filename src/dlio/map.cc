@@ -11,7 +11,6 @@
  ***********************************************************/
 
 #include "dlio/map.h"
-
 #include <filesystem>
 
 dlio::MapNode::MapNode(ros::NodeHandle node_handle) : nh(node_handle) {
@@ -29,7 +28,44 @@ dlio::MapNode::MapNode(ros::NodeHandle node_handle) : nh(node_handle) {
 
 }
 
-dlio::MapNode::~MapNode() {}
+dlio::MapNode::~MapNode() {
+
+  // During destruction, save the map
+
+  pcl::PointCloud<PointType>::Ptr m =
+  pcl::PointCloud<PointType>::Ptr (boost::make_shared<pcl::PointCloud<PointType>>(*this->dlio_map));
+
+  float leaf_size = 0.01;
+  std::string p;
+  p = ros::package::getPath("direct_lidar_inertial_odometry");
+  if (p.empty()) {
+    std::cout << "Could not get package path using ros::package::getPath." << std::endl;
+    return;
+  }
+
+  if (!std::filesystem::is_directory(p)) {
+    std::cout << "Could not find directory " << p << std::endl;
+  }
+  
+  std::cout << std::setprecision(2) << "Saving map to " << p + "/dlio_map.pcd"
+    << " with leaf size " << to_string_with_precision(leaf_size, 2) << "... "; std::cout.flush();
+
+  // voxelize map
+  pcl::VoxelGrid<PointType> vg;
+  vg.setLeafSize(leaf_size, leaf_size, leaf_size);
+  vg.setInputCloud(m);
+  vg.filter(*m);
+
+  // save map
+  int ret = pcl::io::savePCDFileBinary(p + "/dlio_map.pcd", *m);
+  bool success = ret == 0;
+
+  if (success) {
+    std::cout << std::endl << "Map Saved" << std::endl;
+  } else {
+    std::cout << std::endl << "Map Saving failed" << std::endl;
+  }
+}
 
 void dlio::MapNode::getParams() {
 
@@ -38,11 +74,14 @@ void dlio::MapNode::getParams() {
 
   // Get Node NS and Remove Leading Character
   std::string ns = ros::this_node::getNamespace();
-  ns.erase(0,1);
+  std::cout << "Map Node Namespace: " << ns << std::endl;
 
-  // Concatenate Frame Name Strings
-  this->odom_frame = ns + "/" + this->odom_frame;
+  if (ns != "/"){
+    ns.erase(0,1);
 
+    // Concatenate Frame Name Strings
+    this->odom_frame = ns + "/" + this->odom_frame;
+  }
 }
 
 void dlio::MapNode::start() {
@@ -65,13 +104,15 @@ void dlio::MapNode::callbackKeyframe(const sensor_msgs::PointCloud2ConstPtr& key
 
   // publish full map
   if (this->dlio_map->points.size() == this->dlio_map->width * this->dlio_map->height) {
-    sensor_msgs::PointCloud2 map_ros;
-    pcl::toROSMsg(*this->dlio_map, map_ros);
-    map_ros.header.stamp = ros::Time::now();
-    map_ros.header.frame_id = "oodom";//this->odom_frame;
-    this->map_pub.publish(map_ros);
+    if (this->map_pub.getNumSubscribers() > 0)
+    {
+      sensor_msgs::PointCloud2 map_ros;
+      pcl::toROSMsg(*this->dlio_map, map_ros);
+      map_ros.header.stamp = ros::Time::now();
+      map_ros.header.frame_id = this->odom_frame;
+      this->map_pub.publish(map_ros);
+    }
   }
-
 }
 
 bool dlio::MapNode::savePcd(direct_lidar_inertial_odometry::save_pcd::Request& req,

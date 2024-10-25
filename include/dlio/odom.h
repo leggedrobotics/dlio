@@ -33,8 +33,8 @@ private:
 
   void publishPose(const ros::TimerEvent& e);
 
-  void publishToROS(pcl::PointCloud<PointType>::ConstPtr published_cloud, Eigen::Matrix4f T_cloud);
-  void publishCloud(pcl::PointCloud<PointType>::ConstPtr published_cloud, Eigen::Matrix4f T_cloud);
+  void publishToROS(pcl::PointCloud<PointType>::ConstPtr published_cloud, Eigen::Matrix4f T_cloud, Eigen::Matrix4f T_prior_mat);
+  void publishCloud(pcl::PointCloud<PointType>::ConstPtr published_cloud, Eigen::Matrix4f T_cloud, Eigen::Matrix4f T_prior_mat);
   void publishKeyframe(std::pair<std::pair<Eigen::Vector3f, Eigen::Quaternionf>,
                        pcl::PointCloud<PointType>::ConstPtr> kf, ros::Time timestamp);
 
@@ -90,9 +90,11 @@ private:
   ros::Subscriber imu_sub;
 
   // Publishers
+  ros::Publisher registration_odom_pub;
   ros::Publisher odom_pub;
   ros::Publisher pose_pub;
   ros::Publisher path_pub;
+  ros::Publisher registration_path_pub;
   ros::Publisher kf_pose_pub;
   ros::Publisher kf_cloud_pub;
   ros::Publisher deskewed_pub;
@@ -102,6 +104,8 @@ private:
   nav_msgs::Odometry odom_ros;
   geometry_msgs::PoseStamped pose_ros;
   nav_msgs::Path path_ros;
+  nav_msgs::Path path_registration_ros;
+
   geometry_msgs::PoseArray kf_pose_ros;
 
   // Flags
@@ -137,7 +141,6 @@ private:
 
   // Frames
   std::string odom_frame;
-  std::string baselink_frame;
   std::string lidar_frame;
   std::string imu_frame;
 
@@ -315,6 +318,7 @@ private:
   bool imu_calibrate_;
   bool calibrate_gyro_;
   bool calibrate_accel_;
+  int imu_rate_;
   bool gravity_align_;
   double imu_calib_time_;
   int imu_buffer_size_;

@@ -21,6 +21,7 @@ dlio:
     voxelize: true
 
   imu:
+    rate: 500
     calibration: true
     intrinsics:
       accel:

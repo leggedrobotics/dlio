@@ -17,6 +17,7 @@
 #include <cpuid.h>
 #endif
 
+#include <ros/package.h>
 #include <ctime>
 #include <fstream>
 #include <future>
