@@ -26,11 +26,13 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
   this->deskew_status = false;
   this->deskew_size = 0;
 
-  this->lidar_sub = this->nh.subscribe("pointcloud", 500,
-      &dlio::OdomNode::callbackPointCloud, this, ros::TransportHints().tcpNoDelay());
-      
-  this->imu_sub = this->nh.subscribe("imu", 5000,
-      &dlio::OdomNode::callbackImu, this, ros::TransportHints().tcpNoDelay());
+  if (!this->save_replayed_topics_to_rosbag_){
+    this->lidar_sub = this->nh.subscribe("pointcloud", 500,
+        &dlio::OdomNode::callbackPointCloud, this, ros::TransportHints().tcpNoDelay());
+        
+    this->imu_sub = this->nh.subscribe("imu", 5000,
+        &dlio::OdomNode::callbackImu, this, ros::TransportHints().tcpNoDelay());
+  }
 
   this->registration_odom_pub     = this->nh.advertise<nav_msgs::Odometry>("registration_odom", 1, true);
   this->odom_pub     = this->nh.advertise<nav_msgs::Odometry>("high_rate_odom", 1, true);
@@ -162,58 +164,311 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
   }
   fclose(file);
 
-
-  if (this->save_replayed_topics_to_rosbag_){
-
-    ROS_INFO_STREAM("\033[92m"
-                << " In the replay mode. Sleeping for a second to allow the rosbag to start playing."
-                << "\033[0m");
-    const ros::WallTime first{ros::WallTime::now() + ros::WallDuration(0.5)};
-    ros::WallTime::sleepUntil(first);
- 
-    // Get the directory of the ros package
-    // std::string packagePath = ros::package::getPath("hesai_ros_driver");
-      
-    // Generate the log file name
-    std::string outBagDirectory_ = ros::package::getPath("direct_lidar_inertial_odometry") + "/data";
-
-    if (!std::filesystem::exists(outBagDirectory_.c_str()))
-    {
-      std::filesystem::create_directories(outBagDirectory_);
-
-      // set the permissions of the newly created directory
-      std::filesystem::permissions(
-          outBagDirectory_,
-          std::filesystem::perms::owner_all | std::filesystem::perms::group_all,
-          std::filesystem::perm_options::add
-      );
-    }
-
-    std::string outBagPath_;
-    outBagPath_ = outBagDirectory_ + "dlio_" + std::to_string(ros::Time::now().toNSec()) + ".bag";
-    std::cout << "Saved bag Path: " << outBagPath_ << std::endl;
-
-    // Remove the old bag file
-    if (std::filesystem::exists(outBagPath_.c_str()))
-    {
-      std::remove(outBagPath_.c_str());
-    }
-
-    // Open the new bag file
-    this->outputBag.open(outBagPath_, rosbag::bagmode::Write); 
-    this->outputBag.setCompression(rosbag::compression::LZ4);
-    std::filesystem::permissions(
-        outBagPath_,
-        std::filesystem::perms::owner_all | std::filesystem::perms::group_all,
-        std::filesystem::perm_options::add
-    );
-
-  }
 }
 
 dlio::OdomNode::~OdomNode() {}
 
+void dlio::OdomNode::getBagData() {
+
+  this->inputBag.open(this->inputBagPath_, rosbag::bagmode::Read);
+  std::vector<std::string> viewtopics;
+  viewtopics.push_back("/tf_static");
+  viewtopics.push_back(this->lidarTopic_);
+  viewtopics.push_back(this->imuTopic_);
+
+  {
+    rosbag::View view(this->inputBag, rosbag::TopicQuery(viewtopics));
+    // Verify all the topics in the viewtopics exist in the bag
+    for (const auto& topic : viewtopics) {
+      bool topic_found = false;
+      for (const auto& connection_info : view.getConnections()) {
+        if (connection_info->topic == topic) {
+          topic_found = true;
+          break;
+        }
+      }
+      if (!topic_found) {
+        ROS_ERROR_STREAM("Topic " << topic << " not found in the bag.");
+        throw std::runtime_error("Required topic not found in the bag.");
+      }
+    }
+  }
+
+  {
+    rosbag::View view(this->inputBag, rosbag::TopicQuery(this->lidarTopic_));
+    this->bagStartTime_ = view.getBeginTime();
+    this->bagEndTime_ = view.getEndTime();
+
+    ROS_WARN_STREAM("Rosbag Start time: " <<bagStartTime_<< " s ");
+    ROS_WARN_STREAM("Rosbag End time: " <<bagEndTime_<< " s ");
+
+    ros::Duration rosbag_duration = bagEndTime_ - bagStartTime_;
+    this->duration_ = rosbag_duration.toNSec();
+
+    ROS_WARN_STREAM("Duration: " << (duration_ / 1e9) << " s");
+
+    this->totalNumberOfClouds_ = view.size();
+
+    ROS_WARN_STREAM("totalNumberOfClouds_: " << this->totalNumberOfClouds_);
+
+    auto it = view.begin();
+    rosbag::View::iterator last_item;
+    rosbag::View::iterator lastlast_item;
+    while (it != view.end())
+    {
+        last_item = it++;
+
+        if (it == view.end())
+        {
+          break;
+        }else{
+          lastlast_item = last_item;
+        }
+    }
+
+    lastPossibleMsgTime_ = lastlast_item->getTime();
+    ROS_WARN_STREAM("Last Point Cloud Msg time in the bag is: " << lastPossibleMsgTime_ << " s");
+
+
+    // Get the point cloud item from the lastlast_item message instance
+    sensor_msgs::PointCloud2::ConstPtr last_point_cloud = lastlast_item->instantiate<sensor_msgs::PointCloud2>();
+
+    if (last_point_cloud != nullptr) {
+      // Print the frame from the header
+      this->lidar_frame = last_point_cloud->header.frame_id;
+      ROS_WARN_STREAM("Frame ID of the last point cloud: " << last_point_cloud->header.frame_id);
+    } else {
+      ROS_WARN_STREAM("Failed to get the last point cloud message.");
+      throw std::runtime_error("Failed to get the last point cloud message.");
+    }
+
+  }
+
+  {
+    rosbag::View view(this->inputBag, rosbag::TopicQuery(this->imuTopic_));
+
+    this->totalNumberOfIMUmsgs_ = view.size();
+    ROS_WARN_STREAM("totalNumberOfIMUmsgs_: " << this->totalNumberOfIMUmsgs_);
+
+    auto it = view.begin();
+    rosbag::View::iterator last_item;
+    rosbag::View::iterator lastlast_item;
+    while (it != view.end())
+    {
+        last_item = it++;
+
+        if (it == view.end())
+        {
+          break;
+        }else{
+          lastlast_item = last_item;
+        }
+    }
+
+    lastPossibleIMUMsgTime_ = lastlast_item->getTime();
+    ROS_WARN_STREAM("Last IMU Msg time in the bag is: " << lastPossibleIMUMsgTime_ << " s");
+
+
+      // Get the point cloud item from the lastlast_item message instance
+      sensor_msgs::Imu::ConstPtr last_imu = lastlast_item->instantiate<sensor_msgs::Imu>();
+
+      if (last_imu != nullptr) {
+        // Print the frame from the header
+        this->imu_frame = last_imu->header.frame_id;
+        ROS_WARN_STREAM("Frame ID of the last imu: " << last_imu->header.frame_id);
+      } else {
+        ROS_WARN_STREAM("Failed to get the imu message.");
+        throw std::runtime_error("Failed to get the imu message.");
+      }
+
+  }
+
+  {
+    rosbag::View view(this->inputBag, rosbag::TopicQuery("/tf_static"));
+    Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
+    Eigen::Matrix4f Tim = Eigen::Matrix4f::Identity();
+    bool base_lidar_found = false;
+    bool base_imu_found = false;
+
+    for (const rosbag::MessageInstance& m : view) {
+
+      tf2_msgs::TFMessage::ConstPtr tf_static_msg = m.instantiate<tf2_msgs::TFMessage>();
+      if (tf_static_msg != nullptr) {
+        for (const geometry_msgs::TransformStamped& transform : tf_static_msg->transforms) {
+
+          // Box base to lidar frame
+          if ((transform.header.frame_id == "box_base") && (transform.child_frame_id == this->lidar_frame)) {
+            ROS_WARN_STREAM("Found transform from " << "box_base" << " to " << this->lidar_frame);
+            Eigen::Vector3f t = Eigen::Vector3f(transform.transform.translation.x,
+                                                              transform.transform.translation.y,
+                                                              transform.transform.translation.z);
+            Eigen::Matrix3f R = Eigen::Quaternionf(
+              transform.transform.rotation.w,
+              transform.transform.rotation.x,
+              transform.transform.rotation.y,
+              transform.transform.rotation.z).toRotationMatrix();
+
+            
+            T.block<3, 3>(0, 0) = R;
+            T.block<3, 1>(0, 3) = t;
+            // std::cout << "T BASE TO LIDAR: \n" << T << std::endl;
+            base_lidar_found = true;
+          }
+
+
+          if (transform.header.frame_id == "box_base" && transform.child_frame_id == this->imu_frame) {
+            // ROS_WARN_STREAM("Found transform from " << "box_base" << " to " << this->imu_frame);
+            // ROS_WARN_STREAM("Translation: [" << transform.transform.translation.x << ", "
+            //                   << transform.transform.translation.y << ", "
+            //                   << transform.transform.translation.z << "]");
+            // ROS_WARN_STREAM("Rotation: [" << transform.transform.rotation.x << ", "
+            //                 << transform.transform.rotation.y << ", "
+            //                 << transform.transform.rotation.z << ", "
+            //                 << transform.transform.rotation.w << "]");
+
+            Eigen::Vector3f t = Eigen::Vector3f(transform.transform.translation.x,
+                                                              transform.transform.translation.y,
+                                                              transform.transform.translation.z);
+            Eigen::Matrix3f R = Eigen::Quaternionf(
+              transform.transform.rotation.w,
+              transform.transform.rotation.x,
+              transform.transform.rotation.y,
+              transform.transform.rotation.z
+            ).toRotationMatrix();
+
+
+
+            Tim.block<3, 3>(0, 0) = R;
+            Tim.block<3, 1>(0, 3) = t;
+
+            // std::cout << "Tim: \n" << Tim << std::endl;
+            base_imu_found = true;
+            // break;
+          
+          }
+
+          if ( base_imu_found && base_lidar_found){
+
+            Eigen::Matrix4f T_lidar_to_imu = Eigen::Matrix4f::Identity();
+
+            // T -> BOX_BASE TO LIDAR
+            // Tim -> BOX_BASE TO IMU
+            // T_lidar_to_imu -> LIDAR TO IMU
+            T_lidar_to_imu = T.inverse() * Tim;
+
+            this->extrinsics.baselink2imu.t = T_lidar_to_imu.block<3, 1>(0, 3);
+            this->extrinsics.baselink2imu.R = T_lidar_to_imu.block<3, 3>(0, 0);
+          
+            // this->extrinsics.baselink2imu.t = Eigen::Vector3f(transform.transform.translation.x,
+            //                                                   transform.transform.translation.y,
+            //                                                   transform.transform.translation.z);
+            // this->extrinsics.baselink2imu.R = Eigen::Quaternionf(
+            //   transform.transform.rotation.w,
+            //   transform.transform.rotation.x,
+            //   transform.transform.rotation.y,
+            //   transform.transform.rotation.z
+            // ).toRotationMatrix();
+            break;
+          }
+        }
+
+        if ( !(base_imu_found && base_lidar_found)){
+          ROS_ERROR_STREAM("Failed to get both transforms");
+          throw std::runtime_error("Failed to get both transforms");
+        }
+
+      }else{
+        ROS_WARN_STREAM("Failed to get tf_static");
+        throw std::runtime_error("Failed to get tf_static");
+      }
+
+      // There might be multiple tf_static messages in the bag
+      break;
+    }
+
+    {
+      ROS_WARN_STREAM("STARTING THE NODE");
+      const ros::WallTime processingWallTimeExpected{ros::WallTime::now() + ros::WallDuration(2)};
+      ros::WallTime::sleepUntil(processingWallTimeExpected);
+    }
+
+  }
+
+this->inputBag.close();
+}
+
+
+void dlio::OdomNode::iterateBag() {
+
+  this->inputBag.open(this->inputBagPath_, rosbag::bagmode::Read);
+  std::vector<std::string> viewtopics;
+  viewtopics.push_back(this->lidarTopic_);
+  viewtopics.push_back(this->imuTopic_);
+
+  rosbag::View view(this->inputBag, rosbag::TopicQuery(viewtopics));
+  for (const rosbag::MessageInstance& m : view) {
+    {
+      const ros::WallTime processingWallTimeExpected{ros::WallTime::now() + ros::WallDuration(0.01)};
+      ros::WallTime::sleepUntil(processingWallTimeExpected);
+    }
+
+    if (m.getTopic() == this->lidarTopic_) {
+
+      // Do something for lidarTopic_
+      sensor_msgs::PointCloud2::ConstPtr pc = m.instantiate<sensor_msgs::PointCloud2>();
+      if (pc != nullptr) {
+        // {
+        // const ros::WallTime processingWallTimeExpected{ros::WallTime::now() + ros::WallDuration(0.001)};
+        // ros::WallTime::sleepUntil(processingWallTimeExpected);
+        // }
+
+        ROS_INFO_STREAM("Processing lidar message with timestamp: " << pc->header.stamp);
+
+        this->callbackPointCloudOffline(pc);
+
+        // {
+        // const ros::WallTime processingWallTimeExpected{ros::WallTime::now() + ros::WallDuration(0.001)};
+        // ros::WallTime::sleepUntil(processingWallTimeExpected);
+        // }
+
+        ros::spinOnce();
+      }
+    } else if (m.getTopic() == this->imuTopic_) {
+      // Do something for imuTopic_
+      sensor_msgs::Imu::ConstPtr imu = m.instantiate<sensor_msgs::Imu>();
+      if (imu != nullptr) {
+        // {
+        // const ros::WallTime processingWallTimeExpected{ros::WallTime::now() + ros::WallDuration(0.001)};
+        // ros::WallTime::sleepUntil(processingWallTimeExpected);
+        // }
+
+        ROS_INFO_STREAM("Processing imu message with timestamp: " << imu->header.stamp);
+        this->callbackImuOffline(imu);
+
+        {
+        const ros::WallTime processingWallTimeExpected{ros::WallTime::now() + ros::WallDuration(0.001)};
+        ros::WallTime::sleepUntil(processingWallTimeExpected);
+        }
+        
+        publishPoseOffline();
+
+        // {
+        // const ros::WallTime processingWallTimeExpected{ros::WallTime::now() + ros::WallDuration(0.001)};
+        // ros::WallTime::sleepUntil(processingWallTimeExpected);
+        // }
+
+        ros::spinOnce();
+      }
+    }
+  }
+
+
+}
+
 void dlio::OdomNode::getParams() {
+
+
+
 
   // Version
   ros::param::param<std::string>("~dlio/version", this->version_, "0.0.0");
@@ -221,6 +476,19 @@ void dlio::OdomNode::getParams() {
   // Features
   ros::param::param<bool>("~dlio/save_replayed_bag", this->save_replayed_topics_to_rosbag_, false);
   ros::param::param<bool>("~dlio/enable_keyframing", this->enableKeyFraming_, false);
+
+  if (save_replayed_topics_to_rosbag_)
+  {
+    // ROS bag path
+    ros::param::param<std::string>("~input_rosbag_path", this->inputBagPath_, "");
+    // Print the patth
+    ROS_INFO_STREAM("\033[92m"
+                  << "Replaying is activated. The ROS bag path is: " << this->inputBagPath_
+                  << "\033[0m");
+
+    ros::param::param<std::string>("~pointcloud_topic", this->lidarTopic_, "");
+    ros::param::param<std::string>("~imu_topic", this->imuTopic_, "");
+  }
 
   // Frames
   ros::param::param<std::string>("~dlio/frames/odom", this->odom_frame, "dlio_odom");
@@ -280,6 +548,8 @@ void dlio::OdomNode::getParams() {
   std::vector<float> t_default{0., 0., 0.};
   std::vector<float> R_default{1., 0., 0., 0., 1., 0., 0., 0., 1.};
 
+
+if (!this->save_replayed_topics_to_rosbag_){
   // center of gravity to imu
   std::vector<float> baselink2imu_t, baselink2imu_R;
   ros::param::param<std::vector<float>>("~dlio/extrinsics/baselink2imu/t", baselink2imu_t, t_default);
@@ -306,6 +576,7 @@ void dlio::OdomNode::getParams() {
   this->extrinsics.baselink2lidar_T = Eigen::Matrix4f::Identity();
   this->extrinsics.baselink2lidar_T.block(0, 3, 3, 1) = this->extrinsics.baselink2lidar.t;
   this->extrinsics.baselink2lidar_T.block(0, 0, 3, 3) = this->extrinsics.baselink2lidar.R;
+  }
 
   // IMU
   ros::param::param<bool>("~dlio/odom/imu/calibration/accel", this->calibrate_accel_, true);
@@ -316,7 +587,7 @@ void dlio::OdomNode::getParams() {
   std::vector<float> accel_default{0., 0., 0.}; std::vector<float> prior_accel_bias;
   std::vector<float> gyro_default{0., 0., 0.}; std::vector<float> prior_gyro_bias;
 
-  ros::param::param<int>("~dlio/imu/calibration/rate", this->imu_rate_, 200);
+  ros::param::param<int>("~dlio/imu/rate", this->imu_rate_, 200);
   ros::param::param<bool>("~dlio/odom/imu/approximateGravity", this->gravity_align_, true);
   ros::param::param<bool>("~dlio/imu/calibration", this->imu_calibrate_, true);
   ros::param::param<std::vector<float>>("~dlio/imu/intrinsics/accel/bias", prior_accel_bias, accel_default);
@@ -375,6 +646,197 @@ void dlio::OdomNode::start() {
   std::cout << "|               Direct LiDAR-Inertial Odometry v" << this->version_  << "               |"
             << std::endl;
   std::cout << "+-------------------------------------------------------------------+" << std::endl;
+
+
+  std::cout << "Parameters:" << std::endl;
+  std::cout << "Version: " << this->version_ << std::endl;
+  std::cout << "Save replayed bag: " << std::boolalpha << this->save_replayed_topics_to_rosbag_ << std::endl;
+  std::cout << "Enable keyframing: " << std::boolalpha << this->enableKeyFraming_ << std::endl;
+  if (this->save_replayed_topics_to_rosbag_) {
+    std::cout << "Input ROS bag path: " << this->inputBagPath_ << std::endl;
+    std::cout << "Pointcloud topic: " << this->lidarTopic_ << std::endl;
+    std::cout << "IMU topic: " << this->imuTopic_ << std::endl;
+  }
+  std::cout << "Odom frame: " << this->odom_frame << std::endl;
+  std::cout << "Map frame: " << this->map_frame << std::endl;
+  std::cout << "Lidar frame: " << this->lidar_frame << std::endl;
+  std::cout << "IMU frame: " << this->imu_frame << std::endl;
+  std::cout << "Deskew: " << this->deskew_ << std::endl;
+  std::cout << "Gravity: " << this->gravity_ << std::endl;
+  std::cout << "Compute time offset: " << this->time_offset_ << std::endl;
+  std::cout << "Keyframe threshold distance: " << this->keyframe_thresh_dist_ << std::endl;
+  std::cout << "Keyframe threshold rotation: " << this->keyframe_thresh_rot_ << std::endl;
+  std::cout << "Submap KNN: " << this->submap_knn_ << std::endl;
+  std::cout << "Submap KCV: " << this->submap_kcv_ << std::endl;
+  std::cout << "Submap KCC: " << this->submap_kcc_ << std::endl;
+  std::cout << "Dense map filtered: " << this->densemap_filtered_ << std::endl;
+  std::cout << "Wait until move: " << this->wait_until_move_ << std::endl;
+  std::cout << "Crop box filter size: " << this->crop_size_ << std::endl;
+  std::cout << "Voxel grid filter use: " << this->vf_use_ << std::endl;
+  std::cout << "Voxel grid filter resolution: " << this->vf_res_ << std::endl;
+  std::cout << "Adaptive parameters: " << this->adaptive_params_ << std::endl;
+  std::cout << "IMU calibration accel: " << this->calibrate_accel_ << std::endl;
+  std::cout << "IMU calibration gyro: " << this->calibrate_gyro_ << std::endl;
+  std::cout << "IMU calibration time: " << this->imu_calib_time_ << std::endl;
+  std::cout << "IMU buffer size: " << this->imu_buffer_size_ << std::endl;
+  std::cout << "IMU rate: " << this->imu_rate_ << std::endl;
+  std::cout << "Gravity align: " << this->gravity_align_ << std::endl;
+  std::cout << "IMU calibrate: " << this->imu_calibrate_ << std::endl;
+  std::cout << "GICP min num points: " << this->gicp_min_num_points_ << std::endl;
+  std::cout << "GICP K correspondences: " << this->gicp_k_correspondences_ << std::endl;
+  std::cout << "GICP max correspondence distance: " << this->gicp_max_corr_dist_ << std::endl;
+  std::cout << "GICP max iterations: " << this->gicp_max_iter_ << std::endl;
+  std::cout << "GICP transformation epsilon: " << this->gicp_transformation_ep_ << std::endl;
+  std::cout << "GICP rotation epsilon: " << this->gicp_rotation_ep_ << std::endl;
+  std::cout << "GICP initial lambda factor: " << this->gicp_init_lambda_factor_ << std::endl;
+  std::cout << "Geo Kp: " << this->geo_Kp_ << std::endl;
+  std::cout << "Geo Kv: " << this->geo_Kv_ << std::endl;
+  std::cout << "Geo Kq: " << this->geo_Kq_ << std::endl;
+  std::cout << "Geo Kab: " << this->geo_Kab_ << std::endl;
+  std::cout << "Geo Kgb: " << this->geo_Kgb_ << std::endl;
+  std::cout << "Geo abias max: " << this->geo_abias_max_ << std::endl;
+  std::cout << "Geo gbias max: " << this->geo_gbias_max_ << std::endl;
+  std::cout << "Verbose: " << this->verbose << std::endl;
+
+
+  if (this->save_replayed_topics_to_rosbag_){
+
+    ROS_INFO_STREAM("\033[92m"
+                << " In the replay mode."
+                << "\033[0m");
+    const ros::WallTime first{ros::WallTime::now() + ros::WallDuration(0.5)};
+    ros::WallTime::sleepUntil(first);
+ 
+    // Get the directory of the ros package
+    // std::string packagePath = ros::package::getPath("hesai_ros_driver");
+      
+    // Generate the log file name
+    std::string outBagDirectory_ = ros::package::getPath("direct_lidar_inertial_odometry") + "/data";
+
+    if (!std::filesystem::exists(outBagDirectory_.c_str()))
+    {
+      std::filesystem::create_directories(outBagDirectory_);
+
+      // set the permissions of the newly created directory
+      std::filesystem::permissions(
+          outBagDirectory_,
+          std::filesystem::perms::owner_all | std::filesystem::perms::group_all,
+          std::filesystem::perm_options::add
+      );
+    }
+
+    std::string outBagPath_;
+    outBagPath_ = outBagDirectory_ + "/dlio_" + std::to_string(ros::Time::now().toNSec()) + ".bag";
+    std::cout << "Saved bag Path: " << outBagPath_ << std::endl;
+
+    // Remove the old bag file
+    if (std::filesystem::exists(outBagPath_.c_str()))
+    {
+      std::remove(outBagPath_.c_str());
+    }
+
+    // Open the new bag file
+    this->outputBag.open(outBagPath_, rosbag::bagmode::Write); 
+    this->outputBag.setCompression(rosbag::compression::LZ4);
+    std::filesystem::permissions(
+        outBagPath_,
+        std::filesystem::perms::owner_all | std::filesystem::perms::group_all,
+        std::filesystem::perm_options::add
+    );
+
+    getBagData();
+    iterateBag();
+
+    this->outputBag.close();
+
+    raise(SIGINT);
+
+  }else{
+    ROS_INFO_STREAM("\033[92m"
+            << " Replay mode is deactivated. Starting the node."
+            << "\033[0m");
+  }
+
+}
+
+void dlio::OdomNode::publishPoseOffline() {
+
+  if (this->old_imu_stamp_for_tf.toSec() == 0.0) {
+    this->old_imu_stamp_for_tf = this->imu_stamp;
+  }
+
+  if (this->imu_stamp == this->old_imu_stamp_for_tf) {
+   
+    return;
+  }
+
+  this->old_imu_stamp_for_tf = this->imu_stamp;
+
+  // Pose of LiDAR in Odom Frame as nav_msgs::Odometry
+  // nav_msgs::Odometry
+  this->odom_ros.header.stamp = this->imu_stamp;
+  this->odom_ros.header.frame_id = this->odom_frame;
+  this->odom_ros.child_frame_id = this->lidar_frame;
+
+  this->odom_ros.pose.pose.position.x = this->state.p[0];
+  this->odom_ros.pose.pose.position.y = this->state.p[1];
+  this->odom_ros.pose.pose.position.z = this->state.p[2];
+
+  this->odom_ros.pose.pose.orientation.w = this->state.q.w();
+  this->odom_ros.pose.pose.orientation.x = this->state.q.x();
+  this->odom_ros.pose.pose.orientation.y = this->state.q.y();
+  this->odom_ros.pose.pose.orientation.z = this->state.q.z();
+
+  this->odom_ros.twist.twist.linear.x = this->state.v.lin.w[0];
+  this->odom_ros.twist.twist.linear.y = this->state.v.lin.w[1];
+  this->odom_ros.twist.twist.linear.z = this->state.v.lin.w[2];
+
+  this->odom_ros.twist.twist.angular.x = this->state.v.ang.b[0];
+  this->odom_ros.twist.twist.angular.y = this->state.v.ang.b[1];
+  this->odom_ros.twist.twist.angular.z = this->state.v.ang.b[2];
+
+  this->odom_pub.publish(this->odom_ros);
+  if (this->save_replayed_topics_to_rosbag_){
+  this->outputBag.write("high_rate_odometry", this->odom_ros.header.stamp, this->odom_ros);
+  }
+
+  // Pose of LiDAR in Odom Frame as PoseStamped
+  // geometry_msgs::PoseStamped
+  this->pose_ros.header.stamp = this->imu_stamp;
+  this->pose_ros.header.frame_id = this->odom_frame;
+
+  this->pose_ros.pose.position.x = this->state.p[0];
+  this->pose_ros.pose.position.y = this->state.p[1];
+  this->pose_ros.pose.position.z = this->state.p[2];
+
+  this->pose_ros.pose.orientation.w = this->state.q.w();
+  this->pose_ros.pose.orientation.x = this->state.q.x();
+  this->pose_ros.pose.orientation.y = this->state.q.y();
+  this->pose_ros.pose.orientation.z = this->state.q.z();
+
+  this->pose_pub.publish(this->pose_ros);
+  if (this->save_replayed_topics_to_rosbag_){
+  this->outputBag.write("high_rate_pose_of_lidar_in_dlio_odom", this->pose_ros.header.stamp, this->pose_ros);
+  }
+
+  // nav_msgs::Path
+  this->path_ros.header.stamp = this->imu_stamp;
+  this->path_ros.header.frame_id = this->odom_frame;
+
+  // Pose of LiDAR in Odom Frame for Path
+  geometry_msgs::PoseStamped p;
+  p.header.stamp = this->imu_stamp;
+  p.header.frame_id = this->odom_frame;
+  p.pose.position.x = this->state.p[0];
+  p.pose.position.y = this->state.p[1];
+  p.pose.position.z = this->state.p[2];
+  p.pose.orientation.w = this->state.q.w();
+  p.pose.orientation.x = this->state.q.x();
+  p.pose.orientation.y = this->state.q.y();
+  p.pose.orientation.z = this->state.q.z();
+
+  this->path_ros.poses.push_back(p);
+  this->path_pub.publish(this->path_ros);
 
 }
 
@@ -680,6 +1142,19 @@ void dlio::OdomNode::getScanFromROS(const sensor_msgs::PointCloud2ConstPtr& pc) 
 
 }
 
+void dlio::OdomNode::preprocessPointsOffline() {
+
+  // Deskew the original dlio-type scan
+
+  std::cout << "Deskewing the pointcloud." << std::endl;
+  this->deskewPointcloudOffline();
+
+  if (!this->first_valid_scan) {
+    return;
+  }
+
+}
+
 void dlio::OdomNode::preprocessPoints() {
 
   // Deskew the original dlio-type scan
@@ -736,6 +1211,150 @@ void dlio::OdomNode::preprocessPoints() {
   } else {
     this->current_scan = this->deskewed_scan;
   }
+}
+
+void dlio::OdomNode::deskewPointcloudOffline() {
+
+  pcl::PointCloud<PointType>::Ptr deskewed_scan_ (boost::make_shared<pcl::PointCloud<PointType>>());
+  deskewed_scan_->points.resize(this->original_scan->points.size());
+
+  // individual point timestamps should be relative to this time
+  double sweep_ref_time = this->scan_header_stamp.toSec();
+
+  // sort points by timestamp and build list of timestamps
+  std::function<bool(const PointType&, const PointType&)> point_time_cmp;
+  std::function<bool(boost::range::index_value<PointType&, long>,
+                     boost::range::index_value<PointType&, long>)> point_time_neq;
+  std::function<double(boost::range::index_value<PointType&, long>)> extract_point_time;
+
+  if (this->sensor == dlio::SensorType::OUSTER) {
+
+    point_time_cmp = [](const PointType& p1, const PointType& p2)
+      { return p1.t < p2.t; };
+    point_time_neq = [](boost::range::index_value<PointType&, long> p1,
+                        boost::range::index_value<PointType&, long> p2)
+      { return p1.value().t != p2.value().t; };
+    extract_point_time = [&sweep_ref_time](boost::range::index_value<PointType&, long> pt)
+      { return sweep_ref_time + pt.value().t * 1e-9f; };
+
+  } else if (this->sensor == dlio::SensorType::VELODYNE) {
+
+    point_time_cmp = [](const PointType& p1, const PointType& p2)
+      { return p1.time < p2.time; };
+    point_time_neq = [](boost::range::index_value<PointType&, long> p1,
+                        boost::range::index_value<PointType&, long> p2)
+      { return p1.value().time != p2.value().time; };
+    extract_point_time = [&sweep_ref_time](boost::range::index_value<PointType&, long> pt)
+      { return sweep_ref_time + pt.value().time; };
+
+  } else if (this->sensor == dlio::SensorType::HESAI) {
+
+    point_time_cmp = [](const PointType& p1, const PointType& p2)
+      { return p1.timestamp < p2.timestamp; };
+    point_time_neq = [](boost::range::index_value<PointType&, long> p1,
+                        boost::range::index_value<PointType&, long> p2)
+      { return p1.value().timestamp != p2.value().timestamp; };
+    extract_point_time = [&sweep_ref_time](boost::range::index_value<PointType&, long> pt)
+      { return pt.value().timestamp; };
+
+  } else if (this->sensor == dlio::SensorType::LIVOX) {
+    point_time_cmp = [](const PointType& p1, const PointType& p2)
+      { return p1.timestamp < p2.timestamp; };
+    point_time_neq = [](boost::range::index_value<PointType&, long> p1,
+                        boost::range::index_value<PointType&, long> p2)
+      { return p1.value().timestamp != p2.value().timestamp; };
+    extract_point_time = [&sweep_ref_time](boost::range::index_value<PointType&, long> pt)
+      { return pt.value().timestamp * 1e-9f; };
+  }
+
+  // copy points into deskewed_scan_ in order of timestamp
+  std::partial_sort_copy(this->original_scan->points.begin(), this->original_scan->points.end(),
+                         deskewed_scan_->points.begin(), deskewed_scan_->points.end(), point_time_cmp);
+
+  // filter unique timestamps
+  auto points_unique_timestamps = deskewed_scan_->points
+                                  | boost::adaptors::indexed()
+                                  | boost::adaptors::adjacent_filtered(point_time_neq);
+
+  // extract timestamps from points and put them in their own list
+  std::vector<double> timestamps;
+  std::vector<int> unique_time_indices;
+
+  // compute offset between sweep reference time and first point timestamp
+  double offset = 0.0;
+  if (this->time_offset_) {
+    offset = sweep_ref_time - extract_point_time(*points_unique_timestamps.begin());
+  }
+
+  // build list of unique timestamps and indices of first point with each timestamp
+  for (auto it = points_unique_timestamps.begin(); it != points_unique_timestamps.end(); it++) {
+    timestamps.push_back(extract_point_time(*it) + offset);
+    unique_time_indices.push_back(it->index());
+  }
+  unique_time_indices.push_back(deskewed_scan_->points.size());
+
+  int median_pt_index = timestamps.size() / 2;
+  this->scan_stamp = timestamps[median_pt_index]; // set this->scan_stamp to the timestamp of the median point
+
+  // don't process scans until IMU data is present
+  if (!this->first_valid_scan) {
+    if (this->imu_buffer.empty() || this->scan_stamp <= this->imu_buffer.back().stamp) {
+
+      std::cout << "scan_stamp: " << this->scan_stamp << ", imu_buffer.back().stamp: " << this->imu_buffer.back().stamp << std::endl;
+      return;
+    }
+
+    this->first_valid_scan = true;
+    this->T_prior = this->T; // assume no motion for the first scan
+    pcl::transformPointCloud (*deskewed_scan_, *deskewed_scan_, this->T_prior * this->extrinsics.baselink2lidar_T);
+    this->deskewed_scan = deskewed_scan_;
+    this->deskew_status = true;
+    return;
+  }
+
+  ROS_FATAL("About to integrate IMU");
+
+  // IMU prior & deskewing for second scan onwards
+  std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>> frames;
+  frames = this->integrateImuOffline(this->prev_scan_stamp, this->lidarPose.q, this->lidarPose.p,
+                              this->geo.prev_vel.cast<float>(), timestamps);
+  this->deskew_size = frames.size(); // if integration successful, equal to timestamps.size()
+
+  ROS_FATAL("IMU integration complete");
+
+  // if there are no frames between the start and end of the sweep
+  // that probably means that there's a sync issue
+  if (frames.size() != timestamps.size()) {
+    ROS_FATAL("Bad time sync between LiDAR and IMU!");
+    ROS_FATAL("Bad time sync between LiDAR and IMU!");
+    ROS_FATAL("Bad time sync between LiDAR and IMU!");
+
+    this->T_prior = this->T;
+    pcl::transformPointCloud(*deskewed_scan_, *deskewed_scan_, this->T_prior * this->extrinsics.baselink2lidar_T);
+    this->deskewed_scan = deskewed_scan_;
+    this->deskew_status = false;
+    return;
+  }
+
+  // update prior to be the estimated pose at the median time of the scan (corresponds to this->scan_stamp)
+  this->T_prior = frames[median_pt_index];
+
+#pragma omp parallel for num_threads(this->num_threads_)
+  for (int i = 0; i < timestamps.size(); i++) {
+
+    Eigen::Matrix4f T = frames[i] * this->extrinsics.baselink2lidar_T;
+
+    // transform point to world frame
+    for (int k = unique_time_indices[i]; k < unique_time_indices[i+1]; k++) {
+      auto &pt = deskewed_scan_->points[k];
+      pt.getVector4fMap()[3] = 1.;
+      pt.getVector4fMap() = T * pt.getVector4fMap();
+    }
+  }
+
+  this->deskewed_scan = deskewed_scan_;
+  this->deskew_status = true;
+
 }
 
 void dlio::OdomNode::deskewPointcloud() {
@@ -824,6 +1443,8 @@ void dlio::OdomNode::deskewPointcloud() {
   // don't process scans until IMU data is present
   if (!this->first_valid_scan) {
     if (this->imu_buffer.empty() || this->scan_stamp <= this->imu_buffer.back().stamp) {
+
+      std::cout << "scan_stamp: " << this->scan_stamp << ", imu_buffer.back().stamp: " << this->imu_buffer.back().stamp << std::endl;
       return;
     }
 
@@ -835,11 +1456,16 @@ void dlio::OdomNode::deskewPointcloud() {
     return;
   }
 
+  ROS_FATAL("About to integrate IMU");
+
   // IMU prior & deskewing for second scan onwards
   std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>> frames;
   frames = this->integrateImu(this->prev_scan_stamp, this->lidarPose.q, this->lidarPose.p,
                               this->geo.prev_vel.cast<float>(), timestamps);
   this->deskew_size = frames.size(); // if integration successful, equal to timestamps.size()
+
+  ROS_FATAL("IMU integration complete");
+
 
   // if there are no frames between the start and end of the sweep
   // that probably means that there's a sync issue
@@ -902,6 +1528,135 @@ void dlio::OdomNode::initializeDLIO() {
 
   this->dlio_initialized = true;
   std::cout << std::endl << " DLIO initialized!" << std::endl;
+
+}
+
+void dlio::OdomNode::callbackPointCloudOffline(const sensor_msgs::PointCloud2ConstPtr& pc) {
+
+  ROS_FATAL("Received PC");
+
+  // std::unique_lock<decltype(this->main_loop_running_mutex)> lock(main_loop_running_mutex);
+  this->main_loop_running = true;
+  // lock.unlock();
+
+  // double then = ros::Time::now().toSec();
+
+  if (this->first_scan_stamp == 0.) {
+    this->first_scan_stamp = pc->header.stamp.toSec();
+  }
+
+  // DLIO Initialization procedures (IMU calib, gravity align)
+  if (!this->dlio_initialized) {
+    this->initializeDLIO();
+    return;
+  }
+
+  // Convert incoming scan into DLIO format
+  this->getScanFromROS(pc);
+  ROS_FATAL("Got Scans from ROS");
+
+  // Preprocess points
+  this->preprocessPointsOffline();
+
+  ROS_FATAL("PreProcess Points Offline done");
+
+  if (!this->first_valid_scan) {
+    return;
+  }
+
+  if (this->current_scan->points.size() <= this->gicp_min_num_points_) {
+    ROS_FATAL("Low number of points in the cloud!");
+    return;
+  }
+
+  // Compute Metrics
+  this->computeMetrics();
+  ROS_FATAL("computeMetrics done");
+
+  // this->metrics_thread = std::thread( &dlio::OdomNode::computeMetrics, this );
+  // this->metrics_thread.detach();
+
+  // Set Adaptive Parameters
+  if (this->adaptive_params_) {
+    this->setAdaptiveParams();
+    ROS_FATAL("setAdaptiveParams done");
+  }
+
+  // Set new frame as input source
+  this->setInputSource();
+  ROS_FATAL("setInputSource done");
+
+  // Set initial frame as first keyframe
+  if (this->keyframes.size() == 0) {
+    this->initializeInputTarget();
+    ROS_FATAL("initializeInputTarget done");
+    // this->main_loop_running = false;
+    // this->submap_future =
+    //   std::async( std::launch::async, &dlio::OdomNode::buildKeyframesAndSubmap, this, this->state );
+    this->buildKeyframesAndSubmap(this->state);
+    ROS_FATAL("buildKeyframesAndSubmap done");
+    // this->submap_future.wait(); // wait until completion
+    return;
+  }
+
+  // Get the next pose via IMU + S2M + GEO
+  this->getNextPose();
+
+  ROS_FATAL("Getting next pose");
+
+  // Update current keyframe poses and map
+  this->updateKeyframes();
+
+  // Build keyframe normals and submap if needed (and if we're not already waiting)
+  if (this->new_submap_is_ready) {
+    // this->main_loop_running = false;
+    // this->submap_future = std::async(std::launch::async, &dlio::OdomNode::buildKeyframesAndSubmap, this, this->state);
+    this->buildKeyframesAndSubmap(this->state);
+  } else {
+    // lock.lock();
+    this->main_loop_running = false;
+    // lock.unlock();
+    // this->submap_build_cv.notify_one();
+  }
+
+  // Create a 4x4 Eigen matrix from state_q and state_p
+  // Eigen::Matrix4f state_matrix = Eigen::Matrix4f::Identity();
+  // state_matrix.block<3, 3>(0, 0) = this->state.q.toRotationMatrix();
+  // state_matrix.block<3, 1>(0, 3) = this->state.p;
+
+  // Update trajectory
+  this->trajectory.push_back( std::make_pair(this->state.p, this->state.q) );
+
+  // Update time stamps
+  this->lidar_rates.push_back( 1. / (this->scan_stamp - this->prev_scan_stamp) );
+  this->prev_scan_stamp = this->scan_stamp;
+  this->elapsed_time = this->scan_stamp - this->first_scan_stamp;
+
+  // Publish stuff to ROS
+  pcl::PointCloud<PointType>::ConstPtr published_cloud;
+  if (this->densemap_filtered_) {
+    published_cloud = this->current_scan;
+  } else {
+    published_cloud = this->deskewed_scan;
+  }
+  // this->publish_thread = std::thread( &dlio::OdomNode::publishToROS, this, published_cloud, this->T_corr, this->T);
+  // this->publish_thread.detach();
+
+  this->publishToROS(published_cloud, this->T_corr, this->T);
+  ROS_FATAL("publishToROS DONE");
+  
+
+  // Update some statistics
+  // this->comp_times.push_back(ros::Time::now().toSec() - then);
+  this->gicp_hasConverged = this->gicp.hasConverged();
+
+  // // Debug statements and publish custom DLIO message
+  // if (this->verbose) {
+  //   this->debug_thread = std::thread(&dlio::OdomNode::debug, this);
+  //   this->debug_thread.detach();
+  // }
+  
+  this->geo.first_opt_done = true;
 
 }
 
@@ -968,8 +1723,7 @@ void dlio::OdomNode::callbackPointCloud(const sensor_msgs::PointCloud2ConstPtr& 
   // Build keyframe normals and submap if needed (and if we're not already waiting)
   if (this->new_submap_is_ready) {
     this->main_loop_running = false;
-    this->submap_future =
-      std::async( std::launch::async, &dlio::OdomNode::buildKeyframesAndSubmap, this, this->state );
+    this->submap_future = std::async(std::launch::async, &dlio::OdomNode::buildKeyframesAndSubmap, this, this->state);
   } else {
     lock.lock();
     this->main_loop_running = false;
@@ -1006,11 +1760,176 @@ void dlio::OdomNode::callbackPointCloud(const sensor_msgs::PointCloud2ConstPtr& 
 
   // Debug statements and publish custom DLIO message
   if (this->verbose) {
-    this->debug_thread = std::thread( &dlio::OdomNode::debug, this );
+    this->debug_thread = std::thread(&dlio::OdomNode::debug, this);
     this->debug_thread.detach();
   }
   
   this->geo.first_opt_done = true;
+}
+
+void dlio::OdomNode::callbackImuOffline(const sensor_msgs::Imu::ConstPtr& imu_raw) {
+  this->first_imu_received = true;
+
+  ROS_FATAL("Received imu_raw");
+
+  // Move IMU to baselink. (In our case this is LiDAR)
+  sensor_msgs::Imu::Ptr imu = this->transformImu( imu_raw );
+  this->imu_stamp = imu->header.stamp;
+
+  Eigen::Vector3f lin_accel;
+  Eigen::Vector3f ang_vel;
+
+  // Get IMU samples
+  ang_vel[0] = imu->angular_velocity.x;
+  ang_vel[1] = imu->angular_velocity.y;
+  ang_vel[2] = imu->angular_velocity.z;
+
+  lin_accel[0] = imu->linear_acceleration.x;
+  lin_accel[1] = imu->linear_acceleration.y;
+  lin_accel[2] = imu->linear_acceleration.z;
+
+  if (this->first_imu_stamp == 0.) {
+    std::cout << std::endl << " Calibrating IMU for " << this->imu_calib_time_ << " seconds... " << std::endl;
+    this->first_imu_stamp = imu->header.stamp.toSec();
+  }
+
+  // IMU calibration procedure - do for three seconds
+  if (!this->imu_calibrated) {
+
+    static int num_samples = 0;
+    static Eigen::Vector3f gyro_avg (0., 0., 0.);
+    static Eigen::Vector3f accel_avg (0., 0., 0.);
+    static bool print = true;
+
+    if ((imu->header.stamp.toSec() - this->first_imu_stamp) < this->imu_calib_time_) {
+
+      num_samples++;
+
+      gyro_avg[0] += ang_vel[0];
+      gyro_avg[1] += ang_vel[1];
+      gyro_avg[2] += ang_vel[2];
+
+      accel_avg[0] += lin_accel[0];
+      accel_avg[1] += lin_accel[1];
+      accel_avg[2] += lin_accel[2];
+
+      std::cout << std::endl << "Num of IMU msgs:  " << num_samples << " / " << this->imu_rate_ * this->imu_calib_time_ << std::endl;
+
+    } else {
+
+      std::cout << "IMU Calibration is Done" << std::endl << std::endl;
+
+      gyro_avg /= num_samples;
+      accel_avg /= num_samples;
+
+      Eigen::Vector3f grav_vec (0., 0., this->gravity_);
+
+      if (this->gravity_align_) {
+
+        // Estimate gravity vector - Only approximate if biases have not been pre-calibrated
+        grav_vec = (accel_avg - this->state.b.accel).normalized() * abs(this->gravity_);
+        Eigen::Quaternionf grav_q = Eigen::Quaternionf::FromTwoVectors(grav_vec, Eigen::Vector3f(0., 0., this->gravity_));
+
+        // set gravity aligned orientation
+        this->state.q = grav_q;
+        this->T.block(0,0,3,3) = this->state.q.toRotationMatrix();
+        this->lidarPose.q = this->state.q;
+
+        // rpy
+        auto euler = grav_q.toRotationMatrix().eulerAngles(2, 1, 0);
+        double yaw = euler[0] * (180.0/M_PI);
+        double pitch = euler[1] * (180.0/M_PI);
+        double roll = euler[2] * (180.0/M_PI);
+
+        // use alternate representation if the yaw is smaller
+        if (abs(remainder(yaw + 180.0, 360.0)) < abs(yaw)) {
+          yaw   = remainder(yaw + 180.0,   360.0);
+          pitch = remainder(180.0 - pitch, 360.0);
+          roll  = remainder(roll + 180.0,  360.0);
+        }
+        std::cout << " Estimated initial attitude:" << std::endl;
+        std::cout << "   Roll  [deg]: " << to_string_with_precision(roll, 4) << std::endl;
+        std::cout << "   Pitch [deg]: " << to_string_with_precision(pitch, 4) << std::endl;
+        std::cout << "   Yaw   [deg]: " << to_string_with_precision(yaw, 4) << std::endl;
+        std::cout << std::endl;
+      }
+
+      if (this->calibrate_accel_) {
+
+        // subtract gravity from avg accel to get bias
+        this->state.b.accel = accel_avg - grav_vec;
+
+        std::cout << " Accel biases [xyz]: " << to_string_with_precision(this->state.b.accel[0], 8) << ", "
+                                             << to_string_with_precision(this->state.b.accel[1], 8) << ", "
+                                             << to_string_with_precision(this->state.b.accel[2], 8) << std::endl;
+      }
+
+      if (this->calibrate_gyro_) {
+
+        this->state.b.gyro = gyro_avg;
+
+        std::cout << " Gyro biases  [xyz]: " << to_string_with_precision(this->state.b.gyro[0], 8) << ", "
+                                             << to_string_with_precision(this->state.b.gyro[1], 8) << ", "
+                                             << to_string_with_precision(this->state.b.gyro[2], 8) << std::endl;
+      }
+
+      this->imu_calibrated = true;
+
+    }
+
+  } else {
+
+    double dt = imu->header.stamp.toSec() - this->prev_imu_stamp;
+    if (dt == 0) { dt = 1.0/static_cast<double>(this->imu_rate_); }
+    this->imu_rates.push_back( 1./dt );
+
+    // Apply the calibrated bias to the new IMU measurements
+    this->imu_meas.stamp = imu->header.stamp.toSec();
+    this->imu_meas.dt = dt;
+    this->prev_imu_stamp = this->imu_meas.stamp;
+
+    Eigen::Vector3f lin_accel_corrected = (this->imu_accel_sm_ * lin_accel) - this->state.b.accel;
+    Eigen::Vector3f ang_vel_corrected = ang_vel - this->state.b.gyro;
+
+    this->imu_meas.lin_accel = lin_accel_corrected;
+    this->imu_meas.ang_vel = ang_vel_corrected;
+
+    // Store calibrated IMU measurements into imu buffer for manual integration later.
+    // this->mtx_imu.lock();
+    this->imu_buffer.push_front(this->imu_meas);
+    // this->mtx_imu.unlock();
+
+    // Notify the callbackPointCloud thread that IMU data exists for this time
+    // this->cv_imu_stamp.notify_one();
+
+    if (this->geo.first_opt_done) {
+      // Geometric Observer: Propagate State
+      this->propagateState();
+
+      geometry_msgs::TransformStamped transformStamped_inversed;
+
+      // Inverse transform: Lidar to Odom (lidar ---> odom) BUT IN IMU STAMP AND AS A RESULT NOT GOOD FOR ACCUMULATION.
+      transformStamped_inversed.header.stamp = this->imu_stamp;
+      transformStamped_inversed.header.frame_id = this->lidar_frame;
+      transformStamped_inversed.child_frame_id = this->odom_frame;
+
+      Eigen::Quaternionf q_inv = this->state.q.inverse();
+      Eigen::Vector3f t_inv = -(q_inv * this->state.p);
+
+      transformStamped_inversed.transform.translation.x = t_inv[0];
+      transformStamped_inversed.transform.translation.y = t_inv[1];
+      transformStamped_inversed.transform.translation.z = t_inv[2];
+
+      transformStamped_inversed.transform.rotation.w = q_inv.w();
+      transformStamped_inversed.transform.rotation.x = q_inv.x();
+      transformStamped_inversed.transform.rotation.y = q_inv.y();
+      transformStamped_inversed.transform.rotation.z = q_inv.z();
+
+      this->br.sendTransform(transformStamped_inversed);
+
+    }
+  }
+
 }
 
 void dlio::OdomNode::callbackImu(const sensor_msgs::Imu::ConstPtr& imu_raw) {
@@ -1249,6 +2168,119 @@ bool dlio::OdomNode::imuMeasFromTimeRange(double start_time, double end_time,
   begin_imu_it = boost::circular_buffer<ImuMeas>::reverse_iterator(imu_it);
 
   return true;
+}
+
+bool dlio::OdomNode::imuMeasFromTimeRangeOffline(double start_time, double end_time,
+                                          boost::circular_buffer<ImuMeas>::reverse_iterator& begin_imu_it,
+                                          boost::circular_buffer<ImuMeas>::reverse_iterator& end_imu_it) {
+
+  if (this->imu_buffer.empty() || this->imu_buffer.front().stamp < end_time) {
+    // Wait for the latest IMU data
+    // std::unique_lock<decltype(this->mtx_imu)> lock(this->mtx_imu);
+    // this->cv_imu_stamp.wait(lock, [this, &end_time]{ return this->imu_buffer.front().stamp >= end_time; });
+    return this->imu_buffer.front().stamp >= end_time;
+  }
+
+  auto imu_it = this->imu_buffer.begin();
+
+  auto last_imu_it = imu_it;
+  imu_it++;
+  while (imu_it != this->imu_buffer.end() && imu_it->stamp >= end_time) {
+    last_imu_it = imu_it;
+    imu_it++;
+  }
+
+  while (imu_it != this->imu_buffer.end() && imu_it->stamp >= start_time) {
+    imu_it++;
+  }
+
+  if (imu_it == this->imu_buffer.end()) {
+    // not enough IMU measurements, return false
+    return false;
+  }
+  imu_it++;
+
+  // Set reverse iterators (to iterate forward in time)
+  end_imu_it = boost::circular_buffer<ImuMeas>::reverse_iterator(last_imu_it);
+  begin_imu_it = boost::circular_buffer<ImuMeas>::reverse_iterator(imu_it);
+
+  return true;
+}
+
+std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>>
+dlio::OdomNode::integrateImuOffline(double start_time, Eigen::Quaternionf q_init, Eigen::Vector3f p_init,
+                             Eigen::Vector3f v_init, const std::vector<double>& sorted_timestamps) {
+
+  const std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>> empty;
+
+  if (sorted_timestamps.empty() || start_time > sorted_timestamps.front()) {
+    // invalid input, return empty vector
+    return empty;
+  }
+
+  boost::circular_buffer<ImuMeas>::reverse_iterator begin_imu_it;
+  boost::circular_buffer<ImuMeas>::reverse_iterator end_imu_it;
+  if (this->imuMeasFromTimeRangeOffline(start_time, sorted_timestamps.back(), begin_imu_it, end_imu_it) == false) {
+    // not enough IMU measurements, return empty vector
+    return empty;
+  }
+
+  // Backwards integration to find pose at first IMU sample
+  const ImuMeas& f1 = *begin_imu_it;
+  const ImuMeas& f2 = *(begin_imu_it+1);
+
+  // Time between first two IMU samples
+  double dt = f2.dt;
+
+  // Time between first IMU sample and start_time
+  double idt = start_time - f1.stamp;
+
+  // Angular acceleration between first two IMU samples
+  Eigen::Vector3f alpha_dt = f2.ang_vel - f1.ang_vel;
+  Eigen::Vector3f alpha = alpha_dt / dt;
+
+  // Average angular velocity (reversed) between first IMU sample and start_time
+  Eigen::Vector3f omega_i = -(f1.ang_vel + 0.5*alpha*idt);
+
+  // Set q_init to orientation at first IMU sample
+  q_init = Eigen::Quaternionf (
+    q_init.w() - 0.5*( q_init.x()*omega_i[0] + q_init.y()*omega_i[1] + q_init.z()*omega_i[2] ) * idt,
+    q_init.x() + 0.5*( q_init.w()*omega_i[0] - q_init.z()*omega_i[1] + q_init.y()*omega_i[2] ) * idt,
+    q_init.y() + 0.5*( q_init.z()*omega_i[0] + q_init.w()*omega_i[1] - q_init.x()*omega_i[2] ) * idt,
+    q_init.z() + 0.5*( q_init.x()*omega_i[1] - q_init.y()*omega_i[0] + q_init.w()*omega_i[2] ) * idt
+  );
+  q_init.normalize();
+
+  // Average angular velocity between first two IMU samples
+  Eigen::Vector3f omega = f1.ang_vel + 0.5*alpha_dt;
+
+  // Orientation at second IMU sample
+  Eigen::Quaternionf q2 (
+    q_init.w() - 0.5*( q_init.x()*omega[0] + q_init.y()*omega[1] + q_init.z()*omega[2] ) * dt,
+    q_init.x() + 0.5*( q_init.w()*omega[0] - q_init.z()*omega[1] + q_init.y()*omega[2] ) * dt,
+    q_init.y() + 0.5*( q_init.z()*omega[0] + q_init.w()*omega[1] - q_init.x()*omega[2] ) * dt,
+    q_init.z() + 0.5*( q_init.x()*omega[1] - q_init.y()*omega[0] + q_init.w()*omega[2] ) * dt
+  );
+  q2.normalize();
+
+  // Acceleration at first IMU sample
+  Eigen::Vector3f a1 = q_init._transformVector(f1.lin_accel);
+  a1[2] -= this->gravity_;
+
+  // Acceleration at second IMU sample
+  Eigen::Vector3f a2 = q2._transformVector(f2.lin_accel);
+  a2[2] -= this->gravity_;
+
+  // Jerk between first two IMU samples
+  Eigen::Vector3f j = (a2 - a1) / dt;
+
+  // Set v_init to velocity at first IMU sample (go backwards from start_time)
+  v_init -= a1*idt + 0.5*j*idt*idt;
+
+  // Set p_init to position at first IMU sample (go backwards from start_time)
+  p_init -= v_init*idt + 0.5*a1*idt*idt + (1/6.)*j*idt*idt*idt;
+
+  return this->integrateImuInternal(q_init, p_init, v_init, sorted_timestamps, begin_imu_it, end_imu_it);
 }
 
 std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>>

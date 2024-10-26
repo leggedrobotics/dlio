@@ -18,6 +18,8 @@
 #endif
 
 #include <ros/package.h>
+#include <ros/time.h>
+#include <ros/ros.h>
 #include <ctime>
 #include <fstream>
 #include <future>

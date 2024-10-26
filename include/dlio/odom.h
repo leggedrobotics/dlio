@@ -31,7 +31,11 @@ private:
   void callbackPointCloud(const sensor_msgs::PointCloud2ConstPtr& pc);
   void callbackImu(const sensor_msgs::Imu::ConstPtr& imu);
 
+  void callbackPointCloudOffline(const sensor_msgs::PointCloud2ConstPtr& pc);
+  void callbackImuOffline(const sensor_msgs::Imu::ConstPtr& imu);
+
   void publishPose(const ros::TimerEvent& e);
+  void publishPoseOffline();
 
   void publishToROS(pcl::PointCloud<PointType>::ConstPtr published_cloud, Eigen::Matrix4f T_cloud, Eigen::Matrix4f T_prior_mat);
   void publishCloud(pcl::PointCloud<PointType>::ConstPtr published_cloud, Eigen::Matrix4f T_cloud, Eigen::Matrix4f T_prior_mat);
@@ -40,7 +44,9 @@ private:
 
   void getScanFromROS(const sensor_msgs::PointCloud2ConstPtr& pc);
   void preprocessPoints();
+  void preprocessPointsOffline();
   void deskewPointcloud();
+  void deskewPointcloudOffline();
   void initializeInputTarget();
   void setInputSource();
 
@@ -50,9 +56,20 @@ private:
   bool imuMeasFromTimeRange(double start_time, double end_time,
                             boost::circular_buffer<ImuMeas>::reverse_iterator& begin_imu_it,
                             boost::circular_buffer<ImuMeas>::reverse_iterator& end_imu_it);
+
+  bool imuMeasFromTimeRangeOffline(double start_time, double end_time,
+boost::circular_buffer<ImuMeas>::reverse_iterator& begin_imu_it,
+  boost::circular_buffer<ImuMeas>::reverse_iterator& end_imu_it);
+
+  std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>>
+    integrateImuOffline(double start_time, Eigen::Quaternionf q_init, Eigen::Vector3f p_init, Eigen::Vector3f v_init,
+                 const std::vector<double>& sorted_timestamps);
+
+
   std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>>
     integrateImu(double start_time, Eigen::Quaternionf q_init, Eigen::Vector3f p_init, Eigen::Vector3f v_init,
                  const std::vector<double>& sorted_timestamps);
+
   std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>>
     integrateImuInternal(Eigen::Quaternionf q_init, Eigen::Vector3f p_init, Eigen::Vector3f v_init,
                          const std::vector<double>& sorted_timestamps,
@@ -82,9 +99,27 @@ private:
 
   void debug();
 
+  void verifyBag();
+  void iterateBag();
+  void getBagData();
+
   bool save_replayed_topics_to_rosbag_ = false;
-  rosbag::Bag outputBag;
   mutable std::mutex rosbagMutex_;
+  rosbag::Bag outputBag;
+  rosbag::Bag inputBag;
+  std::string inputBagPath_= std::string();
+  ros::Time lastPossibleMsgTime_;
+  ros::Time lastPossibleIMUMsgTime_;
+  ros::Time bagStartTime_;
+  ros::Time bagEndTime_;
+  uint64_t duration_ = 0;
+  uint64_t totalNumberOfClouds_ = 0;
+  uint64_t totalNumberOfIMUmsgs_ = 0;
+
+  std::string lidarTopic_ = std::string();
+  std::string imuTopic_ = std::string();
+
+  // For Live tf Publishing
   tf2_ros::TransformBroadcaster br;
 
   ros::NodeHandle nh;
@@ -208,13 +243,13 @@ private:
 
   struct Extrinsics {
     struct SE3 {
-      Eigen::Vector3f t;
-      Eigen::Matrix3f R;
+      Eigen::Vector3f t = Eigen::Vector3f::Zero();
+      Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
     };
     SE3 baselink2imu;
     SE3 baselink2lidar;
-    Eigen::Matrix4f baselink2imu_T;
-    Eigen::Matrix4f baselink2lidar_T;
+    Eigen::Matrix4f baselink2imu_T = Eigen::Matrix4f::Identity();
+    Eigen::Matrix4f baselink2lidar_T = Eigen::Matrix4f::Identity();
   }; Extrinsics extrinsics;
 
   // IMU

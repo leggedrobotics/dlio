@@ -13,6 +13,8 @@
 dlio:
 
   version: 1.1.1
+  save_replayed_bag: false
+  enable_keyframing: true
 
   adaptive: true
 

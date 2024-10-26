@@ -18,12 +18,13 @@
 
   <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
   <arg name="imu_topic" default="/gt_box/stim320/imu"/>
+  <arg name="input_rosbag_path" default="/home/ttuna/dlio_ws/data_terrrace/merge/merged.bag"/>
 
   <!-- ROS Param -->
   <param name="/use_sim_time" value="$(arg use_sim_time)"/>
 
   <!-- DLIO Odometry Node -->
-  <node name="dlio_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" output="screen" clear_params="true">
+  <node name="dlio_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" output="screen" required="true" clear_params="true">
 
     <!-- Load parameters -->
     <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio_hesai_stim.yaml" command="load"/>
@@ -41,22 +42,24 @@
     <remap from="~kf_cloud" to="dlio/odom_node/pointcloud/keyframe"/>
     <remap from="~deskewed" to="dlio/odom_node/pointcloud/deskewed"/>
 
+    <!-- Input ROS bag path parameter -->
+    <param name="input_rosbag_path" value="$(arg input_rosbag_path)"/>
+    <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+
   </node>
 
   <!-- DLIO Mapping Node -->
-  <node name="dlio_map" pkg="direct_lidar_inertial_odometry" type="dlio_map_node" output="screen" clear_params="true">
+  <!-- <node name="dlio_map" pkg="direct_lidar_inertial_odometry" type="dlio_map_node" output="screen" clear_params="true">
 
-    <!-- Load parameters -->
     <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio_hesai_stim.yaml" command="load"/>
     <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio_hesai_stim_params.yaml" command="load"/>
 
-    <!-- Subscriptions -->
     <remap from="~keyframes" to="dlio/odom_node/pointcloud/keyframe"/>
 
-    <!-- Publications -->
     <remap from="~map" to="dlio/map_node/map"/>
 
-  </node>
+  </node> -->
 
   <!-- RViz -->
   <node pkg="rviz" type="rviz" name="dlio_rviz" args="-d $(find direct_lidar_inertial_odometry)/launch/dlio.rviz" if="$(arg rviz)"/>
