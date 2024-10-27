@@ -82,10 +82,30 @@ private:
 
   void debug();
 
+  void getBagData();
+
   bool save_replayed_topics_to_rosbag_ = false;
   rosbag::Bag outputBag;
+  std::mutex mRosBagMutex;
   mutable std::mutex rosbagMutex_;
   tf2_ros::TransformBroadcaster br;
+
+  uint64_t publishedCloudNum_ = 0;
+  uint64_t totalReceivedIMU_ = 0;
+
+  rosbag::Bag inputBag;
+  std::string inputBagPath_= std::string();
+  ros::Time lastPossibleMsgTime_;
+  ros::Time lastPossibleIMUMsgTime_;
+  ros::Time firstPossibleIMUMsgTime_;
+  ros::Time bagStartTime_;
+  ros::Time bagEndTime_;
+  uint64_t duration_ = 0;
+  uint64_t totalNumberOfClouds_ = 0;
+  uint64_t totalNumberOfIMUmsgs_ = 0;
+
+  std::string lidarTopic_ = std::string();
+  std::string imuTopic_ = std::string();
 
   ros::NodeHandle nh;
   ros::Timer publish_timer;
@@ -151,6 +171,7 @@ private:
   std::string imu_frame;
 
   bool enableKeyFraming_ = true;
+  bool enablePublishing_ = true;
 
   // Preprocessing
   pcl::CropBox<PointType> crop;
@@ -208,13 +229,13 @@ private:
 
   struct Extrinsics {
     struct SE3 {
-      Eigen::Vector3f t;
-      Eigen::Matrix3f R;
+      Eigen::Vector3f t = Eigen::Vector3f::Zero();
+      Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
     };
     SE3 baselink2imu;
     SE3 baselink2lidar;
-    Eigen::Matrix4f baselink2imu_T;
-    Eigen::Matrix4f baselink2lidar_T;
+    Eigen::Matrix4f baselink2imu_T = Eigen::Matrix4f::Identity();
+    Eigen::Matrix4f baselink2lidar_T = Eigen::Matrix4f::Identity();
   }; Extrinsics extrinsics;
 
   // IMU

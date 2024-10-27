@@ -12,12 +12,22 @@
 
 #include "dlio/map.h"
 
+void mySigintHandler(int sig)
+{
+  
+  // All the default sigint handler does is call shutdown()
+  ros::shutdown();
+  exit(0);
+}
+
 int main(int argc, char** argv) {
 
   mallopt(M_ARENA_MAX, 1);
 
-  ros::init(argc, argv, "dlio_map_node");
+  ros::init(argc, argv, "dlio_map_node" , ros::init_options::NoSigintHandler);
   ros::NodeHandle nh("~");
+
+  signal(SIGINT, mySigintHandler);
 
   dlio::MapNode node(nh);
   ros::AsyncSpinner spinner(0);

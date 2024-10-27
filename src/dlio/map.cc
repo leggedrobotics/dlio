@@ -30,8 +30,10 @@ dlio::MapNode::MapNode(ros::NodeHandle node_handle) : nh(node_handle) {
 
 dlio::MapNode::~MapNode() {
 
-  // During destruction, save the map
+  raise(SIGINT);
+  ros::shutdown();
 
+  // During destruction, save the map
   pcl::PointCloud<PointType>::Ptr m =
   pcl::PointCloud<PointType>::Ptr (boost::make_shared<pcl::PointCloud<PointType>>(*this->dlio_map));
 
@@ -65,6 +67,12 @@ dlio::MapNode::~MapNode() {
   // voxelize map
   pcl::VoxelGrid<PointType> vg;
   vg.setLeafSize(leaf_size, leaf_size, leaf_size);
+
+  if (m->empty()) {
+    std::cout << "Map is empty, nothing to save." << std::endl;
+    return;
+  }
+
   vg.setInputCloud(m);
   vg.filter(*m);
 
@@ -77,6 +85,8 @@ dlio::MapNode::~MapNode() {
   } else {
     std::cout << std::endl << "Map Saving failed" << std::endl;
   }
+
+  exit(0);
 }
 
 void dlio::MapNode::getParams() {
@@ -88,12 +98,12 @@ void dlio::MapNode::getParams() {
   std::string ns = ros::this_node::getNamespace();
   std::cout << "Map Node Namespace: " << ns << std::endl;
 
-  if (ns != "/"){
-    ns.erase(0,1);
+  // if (ns != "/"){
+  //   ns.erase(0,1);
 
-    // Concatenate Frame Name Strings
-    this->map_frame = ns + "/" + this->map_frame;
-  }
+  //   // Concatenate Frame Name Strings
+  //   this->map_frame = ns + "/" + this->map_frame;
+  // }
 }
 
 void dlio::MapNode::start() {

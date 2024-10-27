@@ -13,8 +13,9 @@
 dlio:
 
   frames:
+    map: dlio_map
     odom: dlio_odom
-    baselink: bbase
+    # These are only read if no input rosbag is provided.
     lidar: hesai_lidar
     imu: dlio_imu
 

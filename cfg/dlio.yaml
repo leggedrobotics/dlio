@@ -13,9 +13,13 @@
 dlio:
 
   version: 1.1.1
+  verbose: true
+  save_replayed_bag: false
+  # If keyframing is enabled, frames will be skipped.
+  enable_keyframing: true
+  enabling_publishing: true
 
   adaptive: true
-
   pointcloud:
     deskew: true
     voxelize: true
