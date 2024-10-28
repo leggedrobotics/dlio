@@ -19,6 +19,8 @@
   <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
   <arg name="imu_topic" default="/gt_box/stim320/imu"/>
 
+  <!-- Map generation is disabled by default. Pose of LiDAR is map is still available. -->
+  <arg name="enable_map_generation" default="true"/>
 
   <!-- ROS Param -->
   <arg name="use_sim_time" default="true"/>

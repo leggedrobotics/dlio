@@ -37,12 +37,15 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
   this->pose_pub     = this->nh.advertise<geometry_msgs::PoseStamped>("lidar_odometry_as_posestamped", 10, true);
   this->path_pub     = this->nh.advertise<nav_msgs::Path>("lidar_odom_path", 10, true);
   this->registration_path_pub     = this->nh.advertise<nav_msgs::Path>("lidar_map_path", 10, true);
-  this->kf_pose_pub  = this->nh.advertise<geometry_msgs::PoseArray>("kf_pose", 10, true);
-  this->kf_cloud_pub = this->nh.advertise<sensor_msgs::PointCloud2>("kf_cloud", 10, true);
-  this->deskewed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed", 10, true);
+
+  if (this->isMapGenerationEnabled_){
+    this->kf_pose_pub  = this->nh.advertise<geometry_msgs::PoseArray>("kf_pose", 10, true);
+    this->kf_cloud_pub = this->nh.advertise<sensor_msgs::PointCloud2>("kf_cloud", 10, true);
+    this->deskewed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed", 10, true);
+  }
   this->deskewed_but_not_transformed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed_point_cloud", 10, true);
 
-  this->publish_timer = this->nh.createTimer(ros::Duration(1/(static_cast<double>(this->imu_rate_) * 1.2)), &dlio::OdomNode::publishPose, this);
+  this->publish_timer = this->nh.createTimer(ros::Duration(1/(static_cast<double>(this->imu_rate_) * 2.0)), &dlio::OdomNode::publishPose, this);
 
   this->T = Eigen::Matrix4f::Identity();
   this->T_prior = Eigen::Matrix4f::Identity();
@@ -562,6 +565,8 @@ void dlio::OdomNode::getParams() {
   ros::param::param<bool>("~dlio/save_replayed_bag", this->save_replayed_topics_to_rosbag_, false);
   ros::param::param<bool>("~dlio/enable_keyframing", this->enableKeyFraming_, false);
   ros::param::param<bool>("~dlio/enabling_publishing", this->enablePublishing_, false);
+  ros::param::param<bool>("~enable_map_generation", this->isMapGenerationEnabled_, true);
+
 
   // ROS bag path
   ros::param::param<std::string>("~input_rosbag_path", this->inputBagPath_, "");
@@ -842,30 +847,6 @@ void dlio::OdomNode::publishPose(const ros::TimerEvent& e) {
   //   this->outputBag.write("/dlio/lidar_odom_path", this->imu_stamp, this->path_ros);
   // }
 
-
-
-  if ( (this->enablePublishing_) && (!this->save_replayed_topics_to_rosbag_) ) {
-  geometry_msgs::TransformStamped transformStamped_inversed;
-
-  // Inverse transform: Lidar to Odom (lidar ---> odom) BUT IN IMU STAMP(propagated by the latest IMU))
-  transformStamped_inversed.header.stamp = this->imu_stamp;
-  transformStamped_inversed.header.frame_id = this->lidar_frame;
-  transformStamped_inversed.child_frame_id = this->odom_frame;
-
-  Eigen::Quaternionf q_inv = this->state.q.inverse();
-  Eigen::Vector3f t_inv = -(q_inv * this->state.p);
-
-  transformStamped_inversed.transform.translation.x = t_inv[0];
-  transformStamped_inversed.transform.translation.y = t_inv[1];
-  transformStamped_inversed.transform.translation.z = t_inv[2];
-
-  transformStamped_inversed.transform.rotation.w = q_inv.w();
-  transformStamped_inversed.transform.rotation.x = q_inv.x();
-  transformStamped_inversed.transform.rotation.y = q_inv.y();
-  transformStamped_inversed.transform.rotation.z = q_inv.z();
-  this->br.sendTransform(transformStamped_inversed);
-  }
-
 }
 
 void dlio::OdomNode::publishToROS(pcl::PointCloud<PointType>::ConstPtr published_cloud, Eigen::Matrix4f T_cloud, Eigen::Matrix4f T_prior_mat) {
@@ -956,34 +937,34 @@ void dlio::OdomNode::publishToROS(pcl::PointCloud<PointType>::ConstPtr published
     this->outputBag.write("/tf", this->scan_header_stamp, myTf);
   }
 
-  if (this->save_replayed_topics_to_rosbag_){
-    ////////////////////////////////////////////////////////////////////////////
-    ////////// PUBLISH THE ODOM LOWER RATE, BUT ORIGINALLY ITS AT IMU RATE////////////
-    ////////////////////////////////////////////////////////////////////////////
-    geometry_msgs::TransformStamped transformStamped_inversed;
+  // if (this->save_replayed_topics_to_rosbag_){
+  //   ////////////////////////////////////////////////////////////////////////////
+  //   ////////// PUBLISH THE ODOM LOWER RATE, BUT ORIGINALLY ITS AT IMU RATE////////////
+  //   ////////////////////////////////////////////////////////////////////////////
+  //   geometry_msgs::TransformStamped transformStamped_inversed;
 
-    // Inverse transform: Lidar to Odom (lidar ---> odom) BUT IN IMU STAMP(propagated by the latest IMU))
-    transformStamped_inversed.header.stamp = this->imu_stamp;
-    transformStamped_inversed.header.frame_id = this->lidar_frame;
-    transformStamped_inversed.child_frame_id = this->odom_frame;
+  //   // Inverse transform: Lidar to Odom (lidar ---> odom) BUT IN IMU STAMP(propagated by the latest IMU))
+  //   transformStamped_inversed.header.stamp = this->imu_stamp;
+  //   transformStamped_inversed.header.frame_id = this->lidar_frame;
+  //   transformStamped_inversed.child_frame_id = this->odom_frame;
 
-    Eigen::Quaternionf q_inv = this->state.q.inverse();
-    Eigen::Vector3f t_inv = -(q_inv * this->state.p);
+  //   Eigen::Quaternionf q_inv = this->state.q.inverse();
+  //   Eigen::Vector3f t_inv = -(q_inv * this->state.p);
 
-    transformStamped_inversed.transform.translation.x = t_inv[0];
-    transformStamped_inversed.transform.translation.y = t_inv[1];
-    transformStamped_inversed.transform.translation.z = t_inv[2];
+  //   transformStamped_inversed.transform.translation.x = t_inv[0];
+  //   transformStamped_inversed.transform.translation.y = t_inv[1];
+  //   transformStamped_inversed.transform.translation.z = t_inv[2];
 
-    transformStamped_inversed.transform.rotation.w = q_inv.w();
-    transformStamped_inversed.transform.rotation.x = q_inv.x();
-    transformStamped_inversed.transform.rotation.y = q_inv.y();
-    transformStamped_inversed.transform.rotation.z = q_inv.z();
+  //   transformStamped_inversed.transform.rotation.w = q_inv.w();
+  //   transformStamped_inversed.transform.rotation.x = q_inv.x();
+  //   transformStamped_inversed.transform.rotation.y = q_inv.y();
+  //   transformStamped_inversed.transform.rotation.z = q_inv.z();
     
-    std::lock_guard<std::mutex> lock(mRosBagMutex);
-    tf2_msgs::TFMessage myTf;
-    myTf.transforms.push_back(transformStamped_inversed);
-    this->outputBag.write("/tf", this->imu_stamp, myTf);
-  }
+  //   std::lock_guard<std::mutex> lock(mRosBagMutex);
+  //   tf2_msgs::TFMessage myTf;
+  //   myTf.transforms.push_back(transformStamped_inversed);
+  //   this->outputBag.write("/tf", this->imu_stamp, myTf);
+  // }
 
   // Publish after the tf.
   this->publishCloud(published_cloud, T_cloud, T_prior_mat);
@@ -1006,11 +987,11 @@ void dlio::OdomNode::publishCloud(pcl::PointCloud<PointType>::ConstPtr published
   deskewed_ros.header.stamp = this->scan_header_stamp;
   deskewed_ros.header.frame_id = this->map_frame;
    
-  if (this->enablePublishing_)
-  {
-    this->deskewed_pub.publish(deskewed_ros);
+  if (this->enablePublishing_){
+    if (this->isMapGenerationEnabled_){
+      this->deskewed_pub.publish(deskewed_ros);
+    }
   }
-
 
   // Revert the full transform to end-up with only deskewed but not transformed cloud.
   pcl::PointCloud<PointType>::Ptr dekewed_original_ (boost::make_shared<pcl::PointCloud<PointType>>());
@@ -1020,8 +1001,8 @@ void dlio::OdomNode::publishCloud(pcl::PointCloud<PointType>::ConstPtr published
   pcl::toROSMsg(*dekewed_original_, deskewed_original_ros);
   deskewed_original_ros.header.stamp = this->scan_header_stamp;
   deskewed_original_ros.header.frame_id = this->lidar_frame;
-  if (this->enablePublishing_)
-  {
+
+  if (this->enablePublishing_){
     this->deskewed_but_not_transformed_pub.publish(deskewed_original_ros);
   }
 
@@ -1602,6 +1583,38 @@ void dlio::OdomNode::callbackImu(const sensor_msgs::Imu::ConstPtr& imu_raw) {
     if (this->geo.first_opt_done) {
       // Geometric Observer: Propagate State
       this->propagateState();
+
+      // if ( (this->enablePublishing_) && (!this->save_replayed_topics_to_rosbag_) ) {
+      geometry_msgs::TransformStamped transformStamped_inversed;
+
+      // Inverse transform: Lidar to Odom (lidar ---> odom) BUT IN IMU STAMP(propagated by the latest IMU))
+      transformStamped_inversed.header.stamp = this->imu_stamp;
+      transformStamped_inversed.header.frame_id = this->lidar_frame;
+      transformStamped_inversed.child_frame_id = this->odom_frame;
+
+      Eigen::Quaternionf q_inv = this->state.q.inverse();
+      Eigen::Vector3f t_inv = -(q_inv * this->state.p);
+
+      transformStamped_inversed.transform.translation.x = t_inv[0];
+      transformStamped_inversed.transform.translation.y = t_inv[1];
+      transformStamped_inversed.transform.translation.z = t_inv[2];
+
+      transformStamped_inversed.transform.rotation.w = q_inv.w();
+      transformStamped_inversed.transform.rotation.x = q_inv.x();
+      transformStamped_inversed.transform.rotation.y = q_inv.y();
+      transformStamped_inversed.transform.rotation.z = q_inv.z();
+
+      if ( this->enablePublishing_){
+        this->br.sendTransform(transformStamped_inversed);
+      }
+
+      if (this->save_replayed_topics_to_rosbag_){
+        std::lock_guard<std::mutex> lock(mRosBagMutex);
+        tf2_msgs::TFMessage myTf;
+        myTf.transforms.push_back(transformStamped_inversed);
+        this->outputBag.write("/tf", this->imu_stamp, myTf);
+      }
+
     }
   }
 
@@ -2427,8 +2440,10 @@ void dlio::OdomNode::buildKeyframesAndSubmap(State vehicle_state) {
     this->keyframes[i].second = transformed_keyframe;
     this->keyframe_normals[i] = transformed_covariances;
 
-    this->publish_keyframe_thread = std::thread( &dlio::OdomNode::publishKeyframe, this, this->keyframes[i], this->keyframe_timestamps[i] );
-    this->publish_keyframe_thread.detach();
+    if (this->isMapGenerationEnabled_){
+      this->publish_keyframe_thread = std::thread( &dlio::OdomNode::publishKeyframe, this, this->keyframes[i], this->keyframe_timestamps[i] );
+      this->publish_keyframe_thread.detach();
+    }
   }
 
   lock.unlock();

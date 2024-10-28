@@ -90,6 +90,9 @@ private:
   mutable std::mutex rosbagMutex_;
   tf2_ros::TransformBroadcaster br;
 
+  // True by default, set false by replayer if needed.
+  bool isMapGenerationEnabled_ = true;
+
   uint64_t publishedCloudNum_ = 0;
   uint64_t totalReceivedIMU_ = 0;
 

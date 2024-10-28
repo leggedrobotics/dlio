@@ -17,11 +17,14 @@
   <arg name="output_rosbag_path" default="$(find direct_lidar_inertial_odometry)/data"/>
 
   <!-- Input topics. Is rosbag is provided, frame names / calibration / rates will be read automatically. -->
+
+  <!-- Options -->
   <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
   <!-- <arg name="pointcloud_topic" default="/gt_box/livox/lidar"/> -->
 
   <arg name="imu_topic" default="/gt_box/stim320/imu"/>
 
+  <!-- Options -->
   <!-- 
   <arg name="imu_topic" default="/sensors/imu /gt_box/cpt7/offline_from_novatel_logs/imu"/>
   <arg name="imu_topic" default="/gt_box/alphasense_driver_node/imu"/>
@@ -32,7 +35,6 @@
   <arg name="imu_topic" default="/sensors/imu"/> 
   <arg name="imu_topic" default="/gt_box/livox/imu"/>
   -->
-
 
   <!-- Delay rosbag play. -->
   <arg name="play_start_delay" default="1"/>
@@ -64,6 +66,7 @@
     <param name="input_rosbag_path" value="$(arg input_rosbag_path)"/>
     <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
     <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="enable_map_generation" value="$(arg enable_map_generation)"/>
 
     <!-- Subscriptions -->
     <remap from="~pointcloud" to="$(arg pointcloud_topic)"/>
