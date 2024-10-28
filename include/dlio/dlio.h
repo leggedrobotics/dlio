@@ -17,6 +17,10 @@
 #include <cpuid.h>
 #endif
 
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <ros/time.h>
+#include <ros/ros.h>
 #include <ros/package.h>
 #include <ctime>
 #include <fstream>

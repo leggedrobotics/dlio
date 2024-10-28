@@ -1,0 +1,108 @@
+<!--
+
+  Copyright (c)     
+
+  The Verifiable & Control-Theoretic Robotics (VECTR) Lab
+  University of California, Los Angeles
+
+  Authors: Kenny J. Chen, Ryan Nemiroff, Brett T. Lopez
+  Contact: {kennyjchen, ryguyn, btlopez}@ucla.edu
+
+-->
+
+<launch>
+
+  <!-- To disable all the effect of rosbag reading, set this as "" -->
+  <arg name="input_rosbag_path" default="/home/ttuna/dlio_ws/data_terrrace/merge/merged.bag"/>
+  <arg name="output_rosbag_path" default="$(find direct_lidar_inertial_odometry)/data"/>
+
+  <!-- Input topics. Is rosbag is provided, frame names / calibration / rates will be read automatically. -->
+
+  <!-- Options -->
+  <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
+  <!-- <arg name="pointcloud_topic" default="/gt_box/livox/lidar"/> -->
+
+  <arg name="imu_topic" default="/gt_box/stim320/imu"/>
+
+  <!-- Options -->
+  <!-- 
+  <arg name="imu_topic" default="/sensors/imu /gt_box/cpt7/offline_from_novatel_logs/imu"/>
+  <arg name="imu_topic" default="/gt_box/alphasense_driver_node/imu"/>
+  <arg name="imu_topic" default="/gt_box/ap20/imu"/>
+  <arg name="imu_topic" default="/gt_box/livox/imu_si_compliant"/>
+  <arg name="imu_topic" default="/gt_box/adis16475_node/imu"/>
+  <arg name="imu_topic" default="/gt_box/zed2i/zed_node/imu/data"/>
+  <arg name="imu_topic" default="/sensors/imu"/> 
+  <arg name="imu_topic" default="/gt_box/livox/imu"/>
+  -->
+
+  <!-- Delay rosbag play. -->
+  <arg name="play_start_delay" default="1"/>
+
+  <!-- Delay rosbag record. -->
+  <arg name="record_delay" default="1"/>
+
+  <!-- Rviz for viz. -->
+  <arg name="rviz" default="false"/>
+
+  <!-- Map generation is disabled by default. Pose of LiDAR is map is still available. -->
+  <arg name="enable_map_generation" default="false"/>
+
+  <!-- ROS Param -->
+  <arg name="use_sim_time" default="true"/>
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
+  <param name="use_sim_time" value="$(arg use_sim_time)"/>
+
+  <!-- launch-prefix="gdb -ex run minus minus args"  -->
+  <!-- DLIO Odometry Node  -->
+  <arg name="robot_namespace" default="dlio"/>
+  <node ns="$(arg robot_namespace)" name="dlio_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" required="true" output="screen" clear_params="true">
+
+    <!-- Load parameters -->
+    <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio_replay.yaml" command="load"/>
+    <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/params_replay.yaml" command="load"/>
+
+    <!-- Set input for rosbag based reading -->
+    <param name="input_rosbag_path" value="$(arg input_rosbag_path)"/>
+    <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="enable_map_generation" value="$(arg enable_map_generation)"/>
+
+    <!-- Subscriptions -->
+    <remap from="~pointcloud" to="$(arg pointcloud_topic)"/>
+    <remap from="~imu" to="$(arg imu_topic)"/>
+
+    <!-- Publications -->
+    <!-- <remap from="~odom"     to="dlio/odom_node/odom"/>
+    <remap from="~pose"     to="dlio/odom_node/pose"/>
+    <remap from="~path"     to="dlio/odom_node/path"/>
+    <remap from="~kf_pose"  to="dlio/odom_node/keyframes"/>
+    <remap from="~kf_cloud" to="dlio/odom_node/pointcloud/keyframe"/> -->
+    <remap from="~deskewed" to="dlio/odom_node/pointcloud/deskewed_pc_in_map_frame"/>
+
+  </node>
+
+  <group if="$(arg enable_map_generation)">
+    <!-- DLIO Mapping Node -->
+    <node ns="$(arg robot_namespace)" name="dlio_map" pkg="direct_lidar_inertial_odometry" type="dlio_map_node" required="true" output="screen" clear_params="true">
+
+      <!-- Load parameters -->
+      <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio_replay.yaml" command="load"/>
+      <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/params_replay.yaml" command="load"/>
+
+      <!-- Subscriptions -->
+      <remap from="~keyframes" to="dlio/odom_node/pointcloud/keyframe"/>
+
+      <!-- Publications -->
+      <remap from="~map" to="dlio/map_node/map"/>
+
+    </node>
+  </group>
+
+  <!-- RViz -->
+  <node pkg="rviz" type="rviz" name="dlio_rviz" args="-d $(find direct_lidar_inertial_odometry)/launch/dlio.rviz" if="$(arg rviz)"/>
+  
+  <!-- Rosbag play -->
+  <node pkg="rosbag" type="play" name="player" output="screen" launch-prefix="bash -c 'sleep $(arg play_start_delay); $0 $@' xterm -bg lightblue -fg darkslategrey -bd plum -bw 10 -geometry 80x40-50+250 -fn -sony-fixed-medium-r-normal--24-170-100-100-c-120-iso8859-1 -e " args="--clock -r 1 -d 1 $(arg input_rosbag_path)"/>
+
+</launch>

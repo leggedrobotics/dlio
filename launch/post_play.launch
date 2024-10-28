@@ -1,0 +1,35 @@
+<!--
+
+  Copyright (c)     
+
+  The Verifiable & Control-Theoretic Robotics (VECTR) Lab
+  University of California, Los Angeles
+
+  Authors: Kenny J. Chen, Ryan Nemiroff, Brett T. Lopez
+  Contact: {kennyjchen, ryguyn, btlopez}@ucla.edu
+
+-->
+
+<launch>
+
+  <!-- To disable all the effect of rosbag reading, set this as "" -->
+  <arg name="replayed_bag" default="$(find direct_lidar_inertial_odometry)/data/dlio_replayed.bag"/>
+
+  <!-- Delay rosbag play. -->
+  <arg name="play_start_delay" default="2"/>
+
+  <!-- Rviz for viz. -->
+  <arg name="rviz" default="true"/>
+
+  <!-- ROS Param -->
+  <arg name="use_sim_time" default="true"/>
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
+  <param name="use_sim_time" value="$(arg use_sim_time)"/>
+
+  <!-- RViz -->
+  <node pkg="rviz" type="rviz" name="dlio_rviz" args="-d $(find direct_lidar_inertial_odometry)/launch/post.rviz" if="$(arg rviz)"/>
+  
+  <!-- Rosbag play -->
+  <node pkg="rosbag" type="play" name="player" output="screen" launch-prefix="bash -c 'sleep $(arg play_start_delay); $0 $@' xterm -bg lightblue -fg darkslategrey -bd plum -bw 10 -geometry 80x40-50+250 -fn -sony-fixed-medium-r-normal--24-170-100-100-c-120-iso8859-1 -e " args="--clock -r 5 -d 1 $(arg replayed_bag)"/>
+
+</launch>
