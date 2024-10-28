@@ -190,7 +190,7 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
 
     std::string outBagPath_;
     outBagPath_ = outBagDirectory_ + "/dlio_replayed" + ".bag";
-    std::cout << "Saved bag Path: " << outBagPath_ << std::endl;
+    std::cout << "\033[95m" << "The output bag will be saved to: " << outBagPath_ << "\033[0m" << std::endl;
 
     // Remove the old bag file if exists.
     if (std::filesystem::exists(outBagPath_.c_str()))

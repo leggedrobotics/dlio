@@ -6,31 +6,49 @@ All sensor combinations (IMUs + Hesai/Livox) are supported. Currently, a seperat
 
 ## How to build?
 
-Note: make sure to configure your catkin workspace after `catkin init` with `catkin config -DCMAKE_BUILD_TYPE=Release` such that the code is optimized.
+**Note:** make sure to configure your catkin workspace after `catkin init` with `catkin config -DCMAKE_BUILD_TYPE=Release` such that the code is optimized. This version of DLIO explicitly expect PCL 1.10 which comes default with Ubuntu 20.04.
 
-
-`catkin build direct_lidar_inertial_odometry` and source with `source devel/setup.bash`
+`catkin build direct_lidar_inertial_odometry` and source with `source devel/setup.bash`.
 
 ## How to Run?
-Example setup for STIM320 + HesaiXT32
 
-`roslaunch direct_lidar_inertial_odometry dlio_hesai_stim.launch` this wil launch an rviz window.
+If it's your first time here, get the [[ Example Data ](https://drive.google.com/drive/folders/1--H2bow_XGQW5u3hcs3EFAwqDOzuidR0?usp=sharing)]. This bag contains `/tf_static` for automatic calibration reading, STIM320 IMU data and HesaiXT32 motion-distorted pointclouds. You will need to provide the path of the bag to the replay launch file or, you will need to play it yourself fir live operation.
 
-Expects `/gt_box/stim320/imu` and `/gt_box/hesai/points` to be available. So play your favorite bag.
+# Real-time
+`roslaunch direct_lidar_inertial_odometry dlio.launch` -> This launch file is dedicated for live operation. 
 
-Important outputs:
+The launched nodes expects the topics specified in the launch file (current defult`/gt_box/stim320/imu` and `/gt_box/hesai/points`) So play your favorite bag with `rosbag play --clock --pause -s 0 -r 1.0 your.bag`. The node will identify the IMU biases for some seconds and start publishing.
 
-`/dlio_odom/deskewed_original` this is the deskewed point cloud. Same timestamp as the original cloud, and frame. The difference is that the motion compansation has been performed and it can be used for other applications.
+# Replay
 
-`/dlio_odom/registration_path` the path that the LiDAR took in the odometry frame.
+**Note:** Replay mode expects you to provide an input bag path in the launch file `dlio_replay.launch`. The bag will be read automatically and played automatically. The node will terminate automatically once the bag ends, the results of the framework will be saved automatically by default to `$(find direct_lidar_inertial_odometry)/data"` which can be changed in `dlio_replay.launch`.
 
-`/dlio_odom/registration_odom` the odometry message. Reads as pose of LiDAR frame in Odometry frame.
+`roslaunch direct_lidar_inertial_odometry dlio_replay.launch` after setting the right topic names and the bag file path, you can run the replay with this line.
+
+# Replay Viz
+
+`roslaunch direct_lidar_inertial_odometry post_play.launch` you can use this launch file to automatically visualize the outputs of the framework. By default it loads the last replayed bag from it's default path. It plays the replayed results in 5x speed.
+
+# Important Outputs
+
+`/dlio/deskewed_point_cloud` this is the deskewed point cloud. Same timestamp as the original cloud, and frame. The difference is that the motion compansation has been performed and it can be used for other applications.
+
+`/dlio/lidar_map_path` the path that the LiDAR took in the `dlio_map` frame.
+
+`/dlio/lidar_odometry` the LiDAR pose in `dlio_odom` as nav_msgs::Odometry message. Reads as pose of LiDAR frame in Odometry frame.
+
+`/dlio/lidar_odometry_as_posestamped` the LiDAR pose in `dlio_odom` as geometry_msgs::PoseStamped message. Reads as pose of LiDAR frame in Odometry frame.
+
+`/dlio/lidar_map_odometry` the LiDAR pose in `dlio_map` as nav_msgs::Odometry message. Reads as pose of LiDAR frame in Map frame.
 
 `/tf` , the odometry node add the odometry frame as a child of LiDAR to respect the tree structure. You can accumulate the clouds using this frame.
+Odometry frame is called `dlio_odom` and publishes poses at IMU rate. Map frame is called `dlio_map` and publishes at the LiDAR rate.
 
-Note: if you want to change to a different sensor you need too adapt the extrinsic available in `dlio.yaml` and change the topic names / read parameter files accordingly.
+**Note:** if you want to change to a different sensor you need too adapt the extrinsic available in `dlio.yaml` and change the topic names / read parameter files accordingly.
 
-Note: After the destruction of the node, the mapper will automatically save a voxel map to the package directory.
+**Note:** After the destruction of the node, the mapper will automatically save a voxel map to the package directory.
+
+Below you can find the original readme of the authors of this work.
 
 
 # Direct LiDAR-Inertial Odometry: Lightweight LIO with Continuous-Time Motion Correction
