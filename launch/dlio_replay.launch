@@ -101,8 +101,4 @@
 
   <!-- RViz -->
   <node pkg="rviz" type="rviz" name="dlio_rviz" args="-d $(find direct_lidar_inertial_odometry)/launch/dlio.rviz" if="$(arg rviz)"/>
-  
-  <!-- Rosbag play -->
-  <node pkg="rosbag" type="play" name="player" output="screen" launch-prefix="bash -c 'sleep $(arg play_start_delay); $0 $@' xterm -bg lightblue -fg darkslategrey -bd plum -bw 10 -geometry 80x40-50+250 -fn -sony-fixed-medium-r-normal--24-170-100-100-c-120-iso8859-1 -e " args="--clock -r 1 -d 1 $(arg input_rosbag_path)"/>
-
 </launch>
