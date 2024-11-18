@@ -31,9 +31,6 @@
   <arg name="imu_topic" default="/gt_box/livox/imu"/>
   -->
 
-  <!-- Delay rosbag record. -->
-  <arg name="record_delay" default="1"/>
-
   <!-- Map generation is disabled by default. Pose of LiDAR is map is still available. -->
   <arg name="enable_map_generation" default="false"/>
 

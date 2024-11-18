@@ -34,11 +34,8 @@
   <!-- Delay rosbag play. -->
   <arg name="play_start_delay" default="1"/>
 
-  <!-- Delay rosbag record. -->
-  <arg name="record_delay" default="1"/>
-
   <!-- Rviz for viz. -->
-  <arg name="rviz" default="false"/>
+  <arg name="rviz" default="true"/>
 
   <!-- Map generation is disabled by default. Pose of LiDAR is map is still available. -->
   <arg name="enable_map_generation" default="false"/>
@@ -54,8 +51,8 @@
   <node ns="$(arg robot_namespace)" name="dlio_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" required="true" output="screen" clear_params="true">
 
     <!-- Load parameters -->
-    <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio_replay.yaml" command="load"/>
-    <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/params_replay.yaml" command="load"/>
+    <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/dlio_replay_common.yaml" command="load"/>
+    <rosparam file="$(find direct_lidar_inertial_odometry)/cfg/params_replay_common.yaml" command="load"/>
 
     <!-- Set input for rosbag based reading -->
     <param name="input_rosbag_path" value="$(arg input_rosbag_path)"/>
