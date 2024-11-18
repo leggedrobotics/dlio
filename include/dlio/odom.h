@@ -98,6 +98,9 @@ private:
 
   rosbag::Bag inputBag;
   std::string inputBagPath_= std::string();
+  std::string outputBagName_= std::string();
+  std::string outputBagFolderPath_= std::string();
+
   ros::Time lastPossibleMsgTime_;
   ros::Time lastPossibleIMUMsgTime_;
   ros::Time firstPossibleIMUMsgTime_;

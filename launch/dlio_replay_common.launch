@@ -8,10 +8,10 @@
   <!-- <arg name="output_rosbag_folder_path" default=""/> -->
 
   <!-- Trailing .bag and prefix / is handled. No need to add. If left empty, default is used. -->
-  <arg name="output_rosbag_name" default="dlio_replay"/>
+  <arg name="output_rosbag_name" default="dlio_grandtour_postprocessed"/>
   <!-- <arg name="output_rosbag_name" default=""/> -->
 
-  <!-- Input topics. Is rosbag is provided, frame names / calibration / rates will be read automatically. -->
+  <!-- Input topics. If rosbag is provided, frame names / calibration / rates will be read automatically. -->
 
   <!-- Options -->
   <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
@@ -31,8 +31,14 @@
   <arg name="imu_topic" default="/gt_box/livox/imu"/>
   -->
 
+  <!-- Delay rosbag play. -->
+  <arg name="play_start_delay" default="1"/>
+
   <!-- Delay rosbag record. -->
   <arg name="record_delay" default="1"/>
+
+  <!-- Rviz for viz. -->
+  <arg name="rviz" default="false"/>
 
   <!-- Map generation is disabled by default. Pose of LiDAR is map is still available. -->
   <arg name="enable_map_generation" default="false"/>
@@ -90,4 +96,9 @@
     </node>
   </group>
 
+  <!-- RViz -->
+  <node pkg="rviz" type="rviz" name="dlio_rviz" args="-d $(find direct_lidar_inertial_odometry)/launch/dlio.rviz" if="$(arg rviz)"/>
+  
+    <!-- Rosbag play -->
+  <node pkg="rosbag" type="play" name="player" output="screen" launch-prefix="bash -c 'sleep $(arg play_start_delay); $0 $@' xterm -bg lightblue -fg darkslategrey -bd plum -bw 10 -geometry 80x40-50+250 -fn -sony-fixed-medium-r-normal--24-170-100-100-c-120-iso8859-1 -e " args="--clock -r 1 -d 1 $(arg input_rosbag_path)"/>
 </launch>

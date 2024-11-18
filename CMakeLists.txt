@@ -45,21 +45,22 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   nav_msgs
   pcl_ros
-  message_generation
+  # message_generation
 )
 
-add_service_files(
-  DIRECTORY srv
-  FILES
-  save_pcd.srv
-)
+# Commented for in-docker build issue.
+# add_service_files(
+#   DIRECTORY srv
+#   FILES
+#   save_pcd.srv
+# )
 
-generate_messages(
-  DEPENDENCIES
-  sensor_msgs
-  std_msgs
-  geometry_msgs
-)
+# generate_messages(
+#   DEPENDENCIES
+#   sensor_msgs
+#   std_msgs
+#   geometry_msgs
+# )
 
 catkin_package(
   CATKIN_DEPENDS
@@ -103,13 +104,13 @@ target_link_libraries(nano_gicp ${PCL_LIBRARIES} ${OpenMP_LIBS} nanoflann)
 
 # Odometry Node
 add_executable(dlio_odom_node src/dlio/odom_node.cc src/dlio/odom.cc)
-add_dependencies(dlio_odom_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+# add_dependencies(dlio_odom_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 target_compile_options(dlio_odom_node PRIVATE ${OpenMP_FLAGS})
 target_link_libraries(dlio_odom_node ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenMP_LIBS} Threads::Threads nano_gicp)
 
 # Mapping Node
 add_executable (dlio_map_node src/dlio/map_node.cc src/dlio/map.cc)
-add_dependencies(dlio_map_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+# add_dependencies(dlio_map_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 target_compile_options(dlio_map_node PRIVATE ${OpenMP_FLAGS})
 target_link_libraries(dlio_map_node ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenMP_LIBS} Threads::Threads)
 

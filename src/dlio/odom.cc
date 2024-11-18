@@ -173,39 +173,49 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
                 << "\033[0m");
 
     // Generate the save directory
-    std::string outBagDirectory_ = ros::package::getPath("direct_lidar_inertial_odometry") + "/data";
+    if (this->outputBagFolderPath_ == ""){
+      this->outputBagFolderPath_ = ros::package::getPath("direct_lidar_inertial_odometry") + "/data";
+    }
 
-    if (!std::filesystem::exists(outBagDirectory_.c_str()))
+    if (!std::filesystem::exists(this->outputBagFolderPath_.c_str()))
     {
       // Create directory
-      std::filesystem::create_directories(outBagDirectory_);
+      std::filesystem::create_directories(this->outputBagFolderPath_);
 
       // set the permissions of the newly created directory
       std::filesystem::permissions(
-          outBagDirectory_,
+          this->outputBagFolderPath_,
           std::filesystem::perms::owner_all | std::filesystem::perms::group_all,
           std::filesystem::perm_options::add
       );
     }
 
-    std::string outBagPath_;
-    outBagPath_ = outBagDirectory_ + "/dlio_replayed" + ".bag";
-    std::cout << "\033[95m" << "The output bag will be saved to: " << outBagPath_ << "\033[0m" << std::endl;
+    std::string outputBagPath_= std::string();
+    if (this->outputBagName_ == ""){
+      outputBagPath_ = this->outputBagFolderPath_ + "/dlio_replayed" + ".bag";
+    }else{
+      outputBagPath_ = this->outputBagFolderPath_ + "/" + this->outputBagName_ + ".bag";
+    }
+
+    std::cout << "\033[95m" << "The output bag will be saved to: " << outputBagPath_ << "\033[0m" << std::endl;
 
     // Remove the old bag file if exists.
-    if (std::filesystem::exists(outBagPath_.c_str()))
-    {
-      std::remove(outBagPath_.c_str());
+    if (std::filesystem::exists(outputBagPath_.c_str())){
+      std::remove(outputBagPath_.c_str());
     }
 
     // Open the new bag file
-    this->outputBag.open(outBagPath_, rosbag::bagmode::Write); 
+    this->outputBag.open(outputBagPath_, rosbag::bagmode::Write); 
     this->outputBag.setCompression(rosbag::compression::LZ4);
-    std::filesystem::permissions(
-        outBagPath_,
-        std::filesystem::perms::owner_all | std::filesystem::perms::group_all,
-        std::filesystem::perm_options::add
-    );
+    try {
+      std::filesystem::permissions(
+          outputBagPath_,
+          std::filesystem::perms::owner_all | std::filesystem::perms::group_all,
+          std::filesystem::perm_options::add
+      );
+    } catch (const std::filesystem::filesystem_error& e) {
+      std::cerr << "Filesystem error: " << e.what() << std::endl;
+    }
 
   }
 }
@@ -567,19 +577,20 @@ void dlio::OdomNode::getParams() {
   ros::param::param<bool>("~dlio/enabling_publishing", this->enablePublishing_, false);
   ros::param::param<bool>("~enable_map_generation", this->isMapGenerationEnabled_, true);
 
-
   // ROS bag path
   ros::param::param<std::string>("~input_rosbag_path", this->inputBagPath_, "");
+  ros::param::param<std::string>("~output_rosbag_name", this->outputBagName_, "");
+  ros::param::param<std::string>("~output_rosbag_folder_path", this->outputBagFolderPath_, "");
 
   if (this->inputBagPath_ != ""){
-  // Print the path
-  ROS_INFO_STREAM("\033[92m"
-                << "An input bag is provided. The ROS bag path is: " << this->inputBagPath_
-                << "\033[0m");
-  
+    // Print the path
+    ROS_INFO_STREAM("\033[92m"
+                  << "An input bag is provided. The ROS bag path is: " << this->inputBagPath_
+                  << "\033[0m");
+    
 
-  ros::param::param<std::string>("~pointcloud_topic", this->lidarTopic_, "");
-  ros::param::param<std::string>("~imu_topic", this->imuTopic_, "");
+    ros::param::param<std::string>("~pointcloud_topic", this->lidarTopic_, "");
+    ros::param::param<std::string>("~imu_topic", this->imuTopic_, "");
 
   }
 
