@@ -250,6 +250,7 @@ private:
   double first_imu_stamp;
   double prev_imu_stamp;
   double imu_dp, imu_dq_deg;
+  double rough_dt = 0.0;
 
   struct ImuMeas {
     double stamp;

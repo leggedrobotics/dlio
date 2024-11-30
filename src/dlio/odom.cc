@@ -381,6 +381,7 @@ void dlio::OdomNode::getBagData() {
 
     this->imu_rate_ = uint64_t(this->totalNumberOfIMUmsgs_ / ((this->lastPossibleIMUMsgTime_.toNSec() - this->firstPossibleIMUMsgTime_.toNSec()) / 1e9));
     ROS_WARN_STREAM("Effective IMU Rate in the bag: "  << "\033[92m" << this->imu_rate_ << " Hz" << "\033[0m" );
+    this->rough_dt = 1.0/static_cast<double>(this->imu_rate_);
 
   }
 
@@ -433,7 +434,8 @@ void dlio::OdomNode::getBagData() {
 
     }
     catch (tf2::TransformException& ex) {
-      ROS_WARN("Transform exception: %s", ex.what());
+      ROS_ERROR_STREAM("Possibly the tf_static msg is not read correctly. We are looking for " << this->lidar_frame << " to " << this->imu_frame);
+      ROS_ERROR("Transform exception: %s", ex.what());
       throw std::runtime_error("Failed to get the transforms from tf_static");
     }
 
@@ -695,7 +697,8 @@ void dlio::OdomNode::getParams() {
   std::vector<float> gyro_default{0., 0., 0.}; std::vector<float> prior_gyro_bias;
 
   if (this->inputBagPath_ == ""){
-    ros::param::param<int>("~dlio/imu/rate", this->imu_rate_, 200);
+    ros::param::param<int>("~dlio/imu/rate", this->imu_rate_, 400);
+    this->rough_dt = 1.0/static_cast<double>(this->imu_rate_);
   }
   ros::param::param<bool>("~dlio/odom/imu/approximateGravity", this->gravity_align_, true);
   ros::param::param<bool>("~dlio/imu/calibration", this->imu_calibrate_, true);
@@ -904,6 +907,14 @@ void dlio::OdomNode::publishToROS(pcl::PointCloud<PointType>::ConstPtr published
   odom_prior.pose.pose.orientation.x = q_prior.x();
   odom_prior.pose.pose.orientation.y = q_prior.y();
   odom_prior.pose.pose.orientation.z = q_prior.z();
+
+  odom_prior.twist.twist.linear.x = this->state.v.lin.b[0];
+  odom_prior.twist.twist.linear.y = this->state.v.lin.b[1];
+  odom_prior.twist.twist.linear.z = this->state.v.lin.b[2];
+
+  odom_prior.twist.twist.angular.x = this->state.v.ang.b[0];
+  odom_prior.twist.twist.angular.y = this->state.v.ang.b[1];
+  odom_prior.twist.twist.angular.z = this->state.v.ang.b[2];
 
   if (this->enablePublishing_)
   {
@@ -1242,8 +1253,9 @@ void dlio::OdomNode::deskewPointcloud() {
   }
   unique_time_indices.push_back(deskewed_scan_->points.size());
 
-  int median_pt_index = timestamps.size() / 2;
-  this->scan_stamp = timestamps[median_pt_index]; // set this->scan_stamp to the timestamp of the median point
+  // int median_pt_index = timestamps.size() / 2;
+  // this->scan_stamp = timestamps[median_pt_index]; // set this->scan_stamp to the timestamp of the median point
+  this->scan_stamp = timestamps[0];
 
   // don't process scans until IMU data is present
   if (!this->first_valid_scan) {
@@ -1280,7 +1292,8 @@ void dlio::OdomNode::deskewPointcloud() {
   }
 
   // update prior to be the estimated pose at the median time of the scan (corresponds to this->scan_stamp)
-  this->T_prior = frames[median_pt_index];
+  // this->T_prior = frames[median_pt_index];
+  this->T_prior = frames[0];
 
 #pragma omp parallel for num_threads(this->num_threads_)
   for (int i = 0; i < timestamps.size(); i++) {
@@ -1416,11 +1429,12 @@ void dlio::OdomNode::callbackPointCloud(const sensor_msgs::PointCloud2ConstPtr& 
 
   // Publish stuff to ROS
   pcl::PointCloud<PointType>::ConstPtr published_cloud;
-  if (this->densemap_filtered_) {
-    published_cloud = this->current_scan;
-  } else {
-    published_cloud = this->deskewed_scan;
-  }
+  // if (this->densemap_filtered_) {
+  //   published_cloud = this->current_scan;
+  // } else {
+  //   published_cloud = this->deskewed_scan;
+  // }
+  published_cloud = this->deskewed_scan;
   this->publish_thread = std::thread( &dlio::OdomNode::publishToROS, this, published_cloud, this->T_corr, this->T);
   this->publish_thread.detach();
 
@@ -2022,11 +2036,11 @@ sensor_msgs::Imu::Ptr dlio::OdomNode::transformImu(const sensor_msgs::Imu::Const
   // Copy header
   imu->header = imu_raw->header;
 
-  static double prev_stamp = imu->header.stamp.toSec();
-  double dt = imu->header.stamp.toSec() - prev_stamp;
-  prev_stamp = imu->header.stamp.toSec();
+  // static double prev_stamp = imu->header.stamp.toSec();
+  // double dt = imu->header.stamp.toSec() - prev_stamp;
+  // prev_stamp = imu->header.stamp.toSec();
   
-  if (dt == 0) { dt = 1.0/200.0; }
+  // if (dt == 0) { dt = 1.0/400.0; }
 
   // Transform angular velocity (will be the same on a rigid body, so just rotate to ROS convention)
   Eigen::Vector3f ang_vel(imu_raw->angular_velocity.x,
@@ -2049,7 +2063,7 @@ sensor_msgs::Imu::Ptr dlio::OdomNode::transformImu(const sensor_msgs::Imu::Const
   Eigen::Vector3f lin_accel_cg = this->extrinsics.baselink2imu.R * lin_accel;
 
   lin_accel_cg = lin_accel_cg
-                 + ((ang_vel_cg - ang_vel_cg_prev) / dt).cross(-this->extrinsics.baselink2imu.t)
+                 + ((ang_vel_cg - ang_vel_cg_prev) / this->rough_dt).cross(-this->extrinsics.baselink2imu.t)
                  + ang_vel_cg.cross(ang_vel_cg.cross(-this->extrinsics.baselink2imu.t));
 
   ang_vel_cg_prev = ang_vel_cg;
