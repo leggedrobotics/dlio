@@ -131,6 +131,9 @@ Be sure to change the topic names to your corresponding topics. Alternatively, e
 ### Services
 To save DLIO's generated map into `.pcd` format, call the following service:
 
+This feature is currently disabled due to a build error. [TT]
+
+
 ```sh
 rosservice call /robot/dlio_map/save_pcd LEAF_SIZE SAVE_PATH
 ```

@@ -98,6 +98,9 @@ private:
 
   rosbag::Bag inputBag;
   std::string inputBagPath_= std::string();
+  std::string outputBagName_= std::string();
+  std::string outputBagFolderPath_= std::string();
+
   ros::Time lastPossibleMsgTime_;
   ros::Time lastPossibleIMUMsgTime_;
   ros::Time firstPossibleIMUMsgTime_;
@@ -247,6 +250,7 @@ private:
   double first_imu_stamp;
   double prev_imu_stamp;
   double imu_dp, imu_dq_deg;
+  double rough_dt = 0.0;
 
   struct ImuMeas {
     double stamp;
