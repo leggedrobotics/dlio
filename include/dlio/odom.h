@@ -58,8 +58,7 @@ private:
                          const std::vector<double>& sorted_timestamps,
                          boost::circular_buffer<ImuMeas>::reverse_iterator begin_imu_it,
                          boost::circular_buffer<ImuMeas>::reverse_iterator end_imu_it);
-  void propagateGICP();
-
+                         
   void propagateState();
   void updateState();
 
