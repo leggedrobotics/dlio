@@ -1,17 +1,17 @@
 <launch>
 
   <!-- To disable all the effect of rosbag reading, set this as "" -->
-  <arg name="input_rosbag_path" default="/home/ttuna/dlio_ws/data_terrrace/merge/merged.bag"/>
+  <arg name="input_rosbag_path" default="$(find direct_lidar_inertial_odometry)/data/merged_for_dlio.bag"/>
 
   <!-- If left empty, default is used. -->
   <arg name="output_rosbag_folder_path" default="$(find direct_lidar_inertial_odometry)/data"/>
   <!-- <arg name="output_rosbag_folder_path" default=""/> -->
 
   <!-- Trailing .bag and prefix / is handled. No need to add. If left empty, default is used. -->
-  <arg name="output_rosbag_name" default="dlio_grandtour_postprocessed"/>
+  <arg name="output_rosbag_name" default="dlio_replay"/>
   <!-- <arg name="output_rosbag_name" default=""/> -->
 
-  <!-- Input topics. If rosbag is provided, frame names / calibration / rates will be read automatically. -->
+  <!-- Input topics. Is rosbag is provided, frame names / calibration / rates will be read automatically. -->
 
   <!-- Options -->
   <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
