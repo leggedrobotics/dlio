@@ -1106,6 +1106,7 @@ void dlio::OdomNode::getScanFromROS(const sensor_msgs::PointCloud2ConstPtr& pc) 
   }
 
   if (this->sensor == dlio::SensorType::UNKNOWN) {
+    ROS_ERROR("DLIO could not detect sensor type. Please check the point cloud message.");
     this->deskew_ = false;
   }
 
@@ -1127,39 +1128,7 @@ void dlio::OdomNode::preprocessPoints() {
 
   } else {
 
-    std::cout << "Currently pointcloud deskewing is mandatory. Please re-enable." << std::endl;
-
-    // this->scan_stamp = this->scan_header_stamp.toSec();
-
-    // // don't process scans until IMU data is present
-    // if (!this->first_valid_scan) {
-
-    //   if (this->imu_buffer.empty() || this->scan_stamp <= this->imu_buffer.back().stamp) {
-    //     return;
-    //   }
-
-    //   this->first_valid_scan = true;
-    //   this->T_prior = this->T; // assume no motion for the first scan
-
-    // } else {
-
-    //   // IMU prior for second scan onwards
-    // std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>> frames;
-    //   frames = this->integrateImu(this->prev_scan_stamp, this->lidarPose.q, this->lidarPose.p,
-    //                             this->geo.prev_vel.cast<float>(), {this->scan_stamp});
-
-    // if (frames.size() > 0) {
-    //   this->T_prior = frames.back();
-    // } else {
-    //   this->T_prior = this->T;
-    // }
-
-    // }
-
-    // pcl::PointCloud<PointType>::Ptr deskewed_scan_ (boost::make_shared<pcl::PointCloud<PointType>>());
-    // pcl::transformPointCloud (*this->original_scan, *deskewed_scan_, this->T_prior * this->extrinsics.baselink2lidar_T);
-    // this->deskewed_scan = deskewed_scan_;
-    // this->deskew_status = false;
+    ROS_ERROR("Currently pointcloud deskewing is mandatory. Please re-enable.");
   }
 
   // Voxel Grid Filter
