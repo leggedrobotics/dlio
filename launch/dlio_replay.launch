@@ -17,7 +17,17 @@
   <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
   <!-- <arg name="pointcloud_topic" default="/gt_box/livox/lidar"/> -->
 
-  <arg name="imu_topic" default="/gt_box/stim320/imu"/>
+  <arg name="imu_topic" default="/gt_box/cpt7/offline_from_novatel_logs/imu"/>
+
+  <!-- Time offset to IMU for abliations , in micro seconds -->
+  <arg name="abliation_time_offset" default="0.0"/>
+
+  <!-- Translation offset to IMU for abliations , in millimeters -->
+  <arg name="abliation_translation_offset" default="0.0"/>
+  <arg name="abliation_translation_axis" default="x"/>
+
+  <arg name="abliation_rotation_offset" default="0.0"/>
+  <arg name="abliation_rotation_axis" default="x"/>
 
   <!-- Options -->
   <!-- 
@@ -55,6 +65,13 @@
     <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
     <param name="imu_topic" value="$(arg imu_topic)"/>
     <param name="enable_map_generation" value="$(arg enable_map_generation)"/>
+    <param name="abliation_time_offset" value="$(arg abliation_time_offset)"/>
+    
+    <param name="abliation_translation_offset" value="$(arg abliation_translation_offset)"/>
+    <param name="abliation_translation_axis" value="$(arg abliation_translation_axis)"/>
+
+    <param name="abliation_rotation_offset" value="$(arg abliation_rotation_offset)"/>
+    <param name="abliation_rotation_axis" value="$(arg abliation_rotation_axis)"/>
 
     <!-- Subscriptions -->
     <remap from="~pointcloud" to="$(arg pointcloud_topic)"/>

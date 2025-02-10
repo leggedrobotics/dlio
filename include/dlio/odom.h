@@ -83,6 +83,16 @@ private:
 
   void getBagData();
 
+  // Transformation offsets.
+  double abliation_translation_offset = 0.0; // meters
+  std::string abliation_translation_axis = std::string();
+  double abliation_rotation_offset = 0.0; // degrees
+  std::string abliation_rotation_axis = std::string();
+
+  // Time offset for ablation study.
+  double abliation_time_offset_ = 0.0;
+
+  double prev_stamp_ = 0.0;
   bool save_replayed_topics_to_rosbag_ = false;
   rosbag::Bag outputBag;
   std::mutex mRosBagMutex;
