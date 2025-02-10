@@ -444,6 +444,41 @@ void dlio::OdomNode::getBagData() {
 
   }
 
+  // If an abliation offset is set then apply it
+  if ((this->abliation_translation_offset != 0.0) || (this->abliation_rotation_offset != 0.0)) {
+
+    if (this->abliation_translation_axis == "x") {
+      this->extrinsics.baselink2lidar_T(0, 3) += this->abliation_translation_offset;
+        } else if (this->abliation_translation_axis == "y") {
+      this->extrinsics.baselink2lidar_T(1, 3) += this->abliation_translation_offset;
+        } else if (this->abliation_translation_axis == "z") {
+      this->extrinsics.baselink2lidar_T(2, 3) += this->abliation_translation_offset;
+    } else {
+      ROS_ERROR_STREAM("Invalid translation axis for ablation study.");
+      throw std::runtime_error("Invalid translation axis for ablation study.");
+    }
+
+    Eigen::Matrix3f rotation_matrix = Eigen::Matrix3f::Identity();
+    float angle_rad = this->abliation_rotation_offset * M_PI / 180.0;
+
+    if (this->abliation_rotation_axis == "x") {
+      rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitX()).toRotationMatrix();
+    } else if (this->abliation_rotation_axis == "y") {
+      rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitY()).toRotationMatrix();
+    } else if (this->abliation_rotation_axis == "z") {
+      rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+    }else {
+      ROS_ERROR_STREAM("Invalid rotation axis for ablation study.");
+      throw std::runtime_error("Invalid rotation axis for ablation study.");
+    }
+
+    this->extrinsics.baselink2lidar_T.block<3, 3>(0, 0) = rotation_matrix * this->extrinsics.baselink2lidar_T.block<3, 3>(0, 0);
+
+    ROS_WARN_STREAM("Ablation is enabled Extrinsics (baselink to IMU) are offsetted:");
+    ROS_WARN_STREAM("Translation [x, y, z]: " << this->extrinsics.baselink2lidar_T);
+    ROS_WARN_STREAM("Rotation Matrix:\n" << this->extrinsics.baselink2lidar_T.R);
+  }
+
 
   // Calibrate the IMU
   {
@@ -576,11 +611,22 @@ void dlio::OdomNode::getParams() {
   // Version
   ros::param::param<std::string>("~dlio/version", this->version_, "0.0.0");
 
-  // Features
+  // Features (loaded from roslaunch)
   ros::param::param<bool>("~dlio/save_replayed_bag", this->save_replayed_topics_to_rosbag_, false);
   ros::param::param<bool>("~dlio/enable_keyframing", this->enableKeyFraming_, false);
   ros::param::param<bool>("~dlio/enabling_publishing", this->enablePublishing_, false);
   ros::param::param<bool>("~enable_map_generation", this->isMapGenerationEnabled_, true);
+  ros::param::param<double>("~abliation_time_offset", this->abliation_time_offset_, 0);
+
+  // Ablation study translation offset
+  ros::param::param<double>("~abliation_translation_offset", this->abliation_translation_offset, 0.0);
+  ros::param::param<std::string>("~abliation_translation_axis", this->abliation_translation_axis, "z");
+
+  // millimeter to meter
+  this->abliation_translation_offset /= 1000.0;
+
+  ros::param::param<double>("~abliation_rotation_offset", this->abliation_rotation_offset, 0);
+  ros::param::param<std::string>("~abliation_rotation_axis", this->abliation_rotation_axis, "z");
 
   // ROS bag path
   ros::param::param<std::string>("~input_rosbag_path", this->inputBagPath_, "");
@@ -1559,8 +1605,11 @@ void dlio::OdomNode::callbackImu(const sensor_msgs::Imu::ConstPtr& imu_raw) {
     if (dt == 0) { dt = 1.0/static_cast<double>(this->imu_rate_); }
     this->imu_rates.push_back( 1./dt );
 
-    // Apply the calibrated bias to the new IMU measurements
-    this->imu_meas.stamp = imu->header.stamp.toSec();
+    // Add artificial time offset to IMU data, if enabled.
+    double ablation_time_offset_as_seconds = std::chrono::duration<double>(std::chrono::microseconds(int(this->abliation_time_offset_))).count();
+
+    // IMU measurements
+    this->imu_meas.stamp = imu->header.stamp.toSec() + ablation_time_offset_as_seconds;
     this->imu_meas.dt = dt;
     this->prev_imu_stamp = this->imu_meas.stamp;
 
@@ -1999,11 +2048,16 @@ sensor_msgs::Imu::Ptr dlio::OdomNode::transformImu(const sensor_msgs::Imu::Const
 
   sensor_msgs::Imu::Ptr imu (new sensor_msgs::Imu);
 
-  static double prev_stamp = imu->header.stamp.toSec();
+  double stamptAsSec = imu_raw->header.stamp.toSec();
   imu->header = imu_raw->header;
 
-  double dt = imu->header.stamp.toSec() - prev_stamp;
-  prev_stamp = imu->header.stamp.toSec();
+  if (prev_stamp_ == 0){
+    prev_stamp_ = stamptAsSec;
+  }
+  
+
+  double dt = stamptAsSec - prev_stamp_;
+  prev_stamp_ = stamptAsSec;
   
   if (dt == 0) {
     ROS_FATAL("IMU timestamp difference is zero. Using rough estimate for dt.");

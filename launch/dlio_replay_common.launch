@@ -8,7 +8,7 @@
   <!-- <arg name="output_rosbag_folder_path" default=""/> -->
 
   <!-- Trailing .bag and prefix / is handled. No need to add. If left empty, default is used. -->
-  <arg name="output_rosbag_name" default="dlio_replay"/>
+  <arg name="output_rosbag_name" default="dlio_replayed"/>
   <!-- <arg name="output_rosbag_name" default=""/> -->
 
   <!-- Input topics. Is rosbag is provided, frame names / calibration / rates will be read automatically. -->
@@ -17,7 +17,17 @@
   <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
   <!-- <arg name="pointcloud_topic" default="/gt_box/livox/lidar"/> -->
 
-  <arg name="imu_topic" default="/gt_box/stim320/imu"/>
+  <arg name="imu_topic" default="/gt_box/cpt7/offline_from_novatel_logs/imu"/>
+
+  <!-- Time offset to IMU for abliations , in micro seconds -->
+  <arg name="abliation_time_offset" default="0.0"/>
+
+  <!-- Translation offset to IMU for abliations , in millimeters -->
+  <arg name="abliation_translation_offset" default="0.0"/>
+  <arg name="abliation_translation_axis" default="x"/>
+
+  <arg name="abliation_rotation_offset" default="0.0"/>
+  <arg name="abliation_rotation_axis" default="x"/>
 
   <!-- Options -->
   <!-- 
@@ -61,6 +71,13 @@
     <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
     <param name="imu_topic" value="$(arg imu_topic)"/>
     <param name="enable_map_generation" value="$(arg enable_map_generation)"/>
+    <param name="abliation_time_offset" value="$(arg abliation_time_offset)"/>
+    
+    <param name="abliation_translation_offset" value="$(arg abliation_translation_offset)"/>
+    <param name="abliation_translation_axis" value="$(arg abliation_translation_axis)"/>
+
+    <param name="abliation_rotation_offset" value="$(arg abliation_rotation_offset)"/>
+    <param name="abliation_rotation_axis" value="$(arg abliation_rotation_axis)"/>
 
     <!-- Subscriptions -->
     <remap from="~pointcloud" to="$(arg pointcloud_topic)"/>
@@ -97,5 +114,5 @@
   <node pkg="rviz" type="rviz" name="dlio_rviz" args="-d $(find direct_lidar_inertial_odometry)/launch/dlio.rviz" if="$(arg rviz)"/>
   
     <!-- Rosbag play -->
-  <node pkg="rosbag" type="play" name="player" output="screen" launch-prefix="bash -c 'sleep $(arg play_start_delay); $0 $@' xterm -bg lightblue -fg darkslategrey -bd plum -bw 10 -geometry 80x40-50+250 -fn -sony-fixed-medium-r-normal--24-170-100-100-c-120-iso8859-1 -e " args="--clock -r 1 -d 1 $(arg input_rosbag_path)"/>
+  <node pkg="rosbag" type="play" name="player" output="screen" launch-prefix="bash -c 'sleep $(arg play_start_delay); $0 $@' xterm -bg lightblue -fg darkslategrey -bd plum -bw 10 -geometry 80x40-50+250 -fn -sony-fixed-medium-r-normal--24-170-100-100-c-120-iso8859-1 -e " args="--clock -r 1 -s 20 -d 1 $(arg input_rosbag_path)"/>
 </launch>

@@ -70,7 +70,7 @@ Visualization Manager:
       Name: Frames
     - Class: rviz/Group
       Displays:
-        - Alpha: 0.20000000298023224
+        - Alpha: 0.5
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
             Max Value: 10
