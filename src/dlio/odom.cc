@@ -476,7 +476,7 @@ void dlio::OdomNode::getBagData() {
 
     ROS_WARN_STREAM("Ablation is enabled Extrinsics (baselink to IMU) are offsetted:");
     ROS_WARN_STREAM("Translation [x, y, z]: " << this->extrinsics.baselink2lidar_T);
-    ROS_WARN_STREAM("Rotation Matrix:\n" << this->extrinsics.baselink2lidar_T.R);
+    // ROS_WARN_STREAM("Rotation Matrix:\n" << this->extrinsics.baselink2lidar_T.R);
   }
 
 
