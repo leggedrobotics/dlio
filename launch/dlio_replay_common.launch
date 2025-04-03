@@ -1,14 +1,14 @@
 <launch>
 
   <!-- To disable all the effect of rosbag reading, set this as "" -->
-  <arg name="input_rosbag_path" default="$(find direct_lidar_inertial_odometry)/data/merged_for_dlio.bag"/>
+  <arg name="input_rosbag_path" default="/home/tutuna/Music/mitboard2/2024-12-16_16-16-57_still_room_board_2/merged.bag"/>
 
   <!-- If left empty, default is used. -->
   <arg name="output_rosbag_folder_path" default="$(find direct_lidar_inertial_odometry)/data"/>
   <!-- <arg name="output_rosbag_folder_path" default=""/> -->
 
   <!-- Trailing .bag and prefix / is handled. No need to add. If left empty, default is used. -->
-  <arg name="output_rosbag_name" default="dlio_replayed"/>
+  <arg name="output_rosbag_name" default="dlio_grandtour_postprocessed"/>
   <!-- <arg name="output_rosbag_name" default=""/> -->
 
   <!-- Input topics. Is rosbag is provided, frame names / calibration / rates will be read automatically. -->
@@ -17,7 +17,7 @@
   <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
   <!-- <arg name="pointcloud_topic" default="/gt_box/livox/lidar"/> -->
 
-  <arg name="imu_topic" default="/gt_box/cpt7/offline_from_novatel_logs/imu"/>
+  <arg name="imu_topic" default="/zed2i/zed_node/imu/data"/>
 
   <!-- Time offset to IMU for abliations , in micro seconds -->
   <arg name="abliation_time_offset" default="0.0"/>
@@ -28,6 +28,7 @@
 
   <arg name="abliation_rotation_offset" default="0.0"/>
   <arg name="abliation_rotation_axis" default="x"/>
+  <arg name="gravity" default="9.80665"/>
 
   <!-- Options -->
   <!-- 
@@ -78,6 +79,7 @@
 
     <param name="abliation_rotation_offset" value="$(arg abliation_rotation_offset)"/>
     <param name="abliation_rotation_axis" value="$(arg abliation_rotation_axis)"/>
+    <param name="gravity" value="$(arg gravity)"/>
 
     <!-- Subscriptions -->
     <remap from="~pointcloud" to="$(arg pointcloud_topic)"/>

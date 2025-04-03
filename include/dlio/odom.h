@@ -82,6 +82,8 @@ private:
   void debug();
 
   void getBagData();
+  Eigen::Quaternionf quatDerivative(const Eigen::Quaternionf& q, const Eigen::Vector3f& omega);
+  Eigen::Quaternionf integrateQuaternionRK4(const Eigen::Quaternionf& q, const Eigen::Vector3f& omega, double dt);
 
   // Transformation offsets.
   double abliation_translation_offset = 0.0; // meters
@@ -167,6 +169,8 @@ private:
   // Trajectory
   std::vector<std::pair<Eigen::Vector3f, Eigen::Quaternionf>> trajectory;
   double length_traversed;
+  double gravity_constant;
+  const double kEpsilon = 1e-6;
 
   // Keyframes
   std::vector<std::pair<std::pair<Eigen::Vector3f, Eigen::Quaternionf>,
