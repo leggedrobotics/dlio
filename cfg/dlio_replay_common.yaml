@@ -16,17 +16,17 @@ dlio:
   verbose: false
   save_replayed_bag: true
   # If keyframing is enabled, frames will be skipped.
-  enable_keyframing: true
-  enabling_publishing: false
+  enable_keyframing: false
+  enabling_publishing: true
 
   adaptive: true
   pointcloud:
     deskew: true
-    voxelize: true
+    voxelize: false
 
   imu:
     # The rate is only read if no input rosbag is provided.
-    rate: 500
+    rate: 400
     # If an input bag is provided, calibration is done from the bag.
     calibration: true
     intrinsics:

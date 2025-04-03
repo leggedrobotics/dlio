@@ -25,12 +25,12 @@ dlio:
     dense:
       filtered: false
     sparse:
-      leafSize: 0.1
+      leafSize: 0.01
 
   odom:
 
     gravity: 9.80665
-    computeTimeOffset: true
+    computeTimeOffset: false
 
     imu:
       approximateGravity: true
@@ -42,13 +42,13 @@ dlio:
 
     preprocessing:
       cropBoxFilter:
-        size: 1.0
+        size: 0.5
       voxelFilter:
-        res: 0.1
+        res: 0.4
 
     keyframe:
-      threshD: 0.02
-      threshR: 0.05
+      threshD: 0.1
+      threshR: 5.0
 
     submap:
       keyframe:
@@ -58,8 +58,8 @@ dlio:
     gicp:
       minNumPoints: 64
       kCorrespondences: 32
-      maxCorrespondenceDistance: 0.5
-      maxIterations: 32
+      maxCorrespondenceDistance: 2.0
+      maxIterations: 64
       transformationEpsilon: 0.008
       rotationEpsilon: 0.005
       initLambdaFactor: 1e-9

@@ -32,7 +32,7 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
   this->imu_sub = this->nh.subscribe("imu", 500,
       &dlio::OdomNode::callbackImu, this, ros::TransportHints().tcpNoDelay());
 
-  this->registration_odom_pub     = this->nh.advertise<nav_msgs::Odometry>("lidar_map_odometry", 10, true);
+  this->registration_odom_pub     = this->nh.advertise<nav_msgs::Odometry>("lidar_map_odometry", 1, true);
   this->odom_pub     = this->nh.advertise<nav_msgs::Odometry>("lidar_odometry", 10, true);
   this->pose_pub     = this->nh.advertise<geometry_msgs::PoseStamped>("lidar_odometry_as_posestamped", 10, true);
   this->path_pub     = this->nh.advertise<nav_msgs::Path>("lidar_odom_path", 10, true);
@@ -43,7 +43,7 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
     this->kf_cloud_pub = this->nh.advertise<sensor_msgs::PointCloud2>("kf_cloud", 10, true);
     this->deskewed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed", 10, true);
   }
-  this->deskewed_but_not_transformed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed_point_cloud", 10, true);
+  this->deskewed_but_not_transformed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed_point_cloud", 1, true);
 
   // Only enable publishing if we are on the live mode.
   if(this->enablePublishing_){
@@ -485,8 +485,8 @@ void dlio::OdomNode::getBagData() {
     rosbag::View view(this->inputBag, rosbag::TopicQuery(this->imuTopic_));
 
     static int num_samples = 0;
-    static Eigen::Vector3f gyro_avg (0., 0., 0.);
-    static Eigen::Vector3f accel_avg (0., 0., 0.);
+    static Eigen::Vector3f gyro_avg(0., 0., 0.);
+    static Eigen::Vector3f accel_avg(0., 0., 0.);
     static bool print = true;
 
     for (const rosbag::MessageInstance& m : view) {
@@ -933,7 +933,11 @@ void dlio::OdomNode::publishToROS(pcl::PointCloud<PointType>::ConstPtr published
   this->path_registration_ros.poses.push_back(p_reg);
 
   if (this->enablePublishing_){
-    this->registration_path_pub.publish(this->path_registration_ros);
+    if (this->registration_path_pub.getNumSubscribers() > 0)
+    {
+      this->registration_path_pub.publish(this->path_registration_ros);
+    }
+
   }
   
   if (this->save_replayed_topics_to_rosbag_){
@@ -968,8 +972,12 @@ void dlio::OdomNode::publishToROS(pcl::PointCloud<PointType>::ConstPtr published
 
   if (this->enablePublishing_)
   {
-  // Publish the odometry message
-  this->registration_odom_pub.publish(odom_prior);
+
+    if (this->registration_odom_pub.getNumSubscribers() > 0)
+    {
+      // Publish the odometry message
+      this->registration_odom_pub.publish(odom_prior);
+    }
   }
 
   if (this->save_replayed_topics_to_rosbag_){
@@ -1007,35 +1015,6 @@ void dlio::OdomNode::publishToROS(pcl::PointCloud<PointType>::ConstPtr published
     this->outputBag.write("/tf", this->scan_header_stamp, tfmessage);
   }
 
-  // if (this->save_replayed_topics_to_rosbag_){
-  //   ////////////////////////////////////////////////////////////////////////////
-  //   ////////// PUBLISH THE ODOM LOWER RATE, BUT ORIGINALLY ITS AT IMU RATE////////////
-  //   ////////////////////////////////////////////////////////////////////////////
-  //   geometry_msgs::TransformStamped transformStamped_inversed;
-
-  //   // Inverse transform: Lidar to Odom (lidar ---> odom) BUT IN IMU STAMP(propagated by the latest IMU))
-  //   transformStamped_inversed.header.stamp = this->imu_stamp;
-  //   transformStamped_inversed.header.frame_id = this->lidar_frame;
-  //   transformStamped_inversed.child_frame_id = this->odom_frame;
-
-  //   Eigen::Quaternionf q_inv = this->state.q.inverse();
-  //   Eigen::Vector3f t_inv = -(q_inv * this->state.p);
-
-  //   transformStamped_inversed.transform.translation.x = t_inv[0];
-  //   transformStamped_inversed.transform.translation.y = t_inv[1];
-  //   transformStamped_inversed.transform.translation.z = t_inv[2];
-
-  //   transformStamped_inversed.transform.rotation.w = q_inv.w();
-  //   transformStamped_inversed.transform.rotation.x = q_inv.x();
-  //   transformStamped_inversed.transform.rotation.y = q_inv.y();
-  //   transformStamped_inversed.transform.rotation.z = q_inv.z();
-    
-  //   std::lock_guard<std::mutex> lock(mRosBagMutex);
-  //   tf2_msgs::TFMessage myTf;
-  //   myTf.transforms.push_back(transformStamped_inversed);
-  //   this->outputBag.write("/tf", this->imu_stamp, myTf);
-  // }
-
 }
 
 void dlio::OdomNode::publishCloud(pcl::PointCloud<PointType>::ConstPtr published_cloud, Eigen::Matrix4f T_corr , Eigen::Matrix4f T_full) {
@@ -1056,7 +1035,10 @@ void dlio::OdomNode::publishCloud(pcl::PointCloud<PointType>::ConstPtr published
    
   if (this->enablePublishing_){
     if (this->isMapGenerationEnabled_){
-      this->deskewed_pub.publish(deskewed_ros);
+      if (this->deskewed_pub.getNumSubscribers() > 0)
+      {
+        this->deskewed_pub.publish(deskewed_ros);
+      }
     }
   }
 
@@ -1070,7 +1052,9 @@ void dlio::OdomNode::publishCloud(pcl::PointCloud<PointType>::ConstPtr published
   deskewed_original_ros.header.frame_id = this->lidar_frame;
 
   if (this->enablePublishing_){
-    this->deskewed_but_not_transformed_pub.publish(deskewed_original_ros);
+    if (this->deskewed_but_not_transformed_pub.getNumSubscribers() > 0){
+      this->deskewed_but_not_transformed_pub.publish(deskewed_original_ros);
+    }
   }
 
   if (this->save_replayed_topics_to_rosbag_){
@@ -1271,8 +1255,20 @@ void dlio::OdomNode::deskewPointcloud() {
 
   // int median_pt_index = timestamps.size() / 2;
   // this->scan_stamp = timestamps[median_pt_index]; // set this->scan_stamp to the timestamp of the median point
+  // Compare first and last timestamps
+  if (timestamps.front() >= timestamps.back()) {
+    ROS_FATAL("Timestamps are not in ascending order!");
+    return;
+  }
+  
   this->scan_stamp = timestamps[0];
 
+  if (this->prev_scan_stamp == this->scan_stamp)
+  {
+    ROS_FATAL("Timestamps are equal");
+    return;
+  }
+  
   // don't process scans until IMU data is present
   if (!this->first_valid_scan) {
     ROS_WARN_STREAM_THROTTLE(0.5, "First valid scan not yet received. Waiting for IMU data.");
@@ -1443,15 +1439,11 @@ void dlio::OdomNode::callbackPointCloud(const sensor_msgs::PointCloud2ConstPtr& 
   pcl::PointCloud<PointType>::ConstPtr published_cloud;
   published_cloud = this->deskewed_scan;
 
-  if (this->enablePublishing_)
-  {
-    this->publish_thread = std::thread( &dlio::OdomNode::publishToROS, this, published_cloud, this->T_corr, this->T);
-    this->publish_thread.detach();
-  }else{
 
-    this->publishToROS(published_cloud, this->T_corr, this->T);
+  this->publishToROS(published_cloud, this->T_corr, this->T);
+  // this->publish_thread = std::thread( &dlio::OdomNode::publishToROS, this, published_cloud, this->T_corr, this->T);
+  // this->publish_thread.detach();
 
-  }
 
   // Update some statistics
   this->comp_times.push_back(ros::Time::now().toSec() - then);
@@ -1582,8 +1574,8 @@ void dlio::OdomNode::callbackImu(const sensor_msgs::Imu::ConstPtr& imu_raw) {
         this->state.b.accel = accel_avg - grav_vec;
 
         std::cout << " Accel biases [xyz]: " << to_string_with_precision(this->state.b.accel[0], 8) << ", "
-                                             << to_string_with_precision(this->state.b.accel[1], 8) << ", "
-                                             << to_string_with_precision(this->state.b.accel[2], 8) << std::endl;
+                                            << to_string_with_precision(this->state.b.accel[1], 8) << ", "
+                                            << to_string_with_precision(this->state.b.accel[2], 8) << std::endl;
       }
 
       if (this->calibrate_gyro_) {
@@ -2054,9 +2046,9 @@ sensor_msgs::Imu::Ptr dlio::OdomNode::transformImu(const sensor_msgs::Imu::Const
   if (prev_stamp_ == 0){
     prev_stamp_ = stamptAsSec;
   }
-  
 
-  double dt = stamptAsSec - prev_stamp_;
+  double dt = imu->header.stamp.toSec() - prev_stamp_;
+  // prev_stamp = imu->header.stamp.toSec();
   prev_stamp_ = stamptAsSec;
   
   if (dt == 0) {
@@ -2085,8 +2077,8 @@ sensor_msgs::Imu::Ptr dlio::OdomNode::transformImu(const sensor_msgs::Imu::Const
   Eigen::Vector3f lin_accel_cg = this->extrinsics.baselink2imu.R * lin_accel;
 
   lin_accel_cg = lin_accel_cg
-                 + ((ang_vel_cg - ang_vel_cg_prev) / this->rough_dt).cross(-this->extrinsics.baselink2imu.t)
-                 + ang_vel_cg.cross(ang_vel_cg.cross(-this->extrinsics.baselink2imu.t));
+                + ((ang_vel_cg - ang_vel_cg_prev) /  dt).cross(-this->extrinsics.baselink2imu.t)
+                + ang_vel_cg.cross(ang_vel_cg.cross(-this->extrinsics.baselink2imu.t));
 
   ang_vel_cg_prev = ang_vel_cg;
 

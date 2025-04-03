@@ -13,8 +13,12 @@
 cmake_minimum_required(VERSION 3.4)
 project(direct_lidar_inertial_odometry)
 
-add_compile_options(-std=c++17)
-set(CMAKE_BUILD_TYPE "Release")
+# Some of the flags might not be affective as all libraries require it
+add_compile_options(-std=c++17 -O3 -mtune=native -march=native -funroll-loops -fopenmp -fopt-info-vec-optimized) #-funsafe-math-optimizations -funsafe-loop-optimizations
+# add_compile_options(-std=c++17) #-march=native -O3 -mtune=native -ffast-math -funroll-loops -fopenmp
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 
 # PCL 1.10 is standard on Ubuntu 20.04
 find_package(PCL 1.10 EXACT REQUIRED PATHS /usr/include/pcl-1.10/)
@@ -22,10 +26,10 @@ include_directories(${PCL_INCLUDE_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 link_directories(${PCL_LIBRARY_DIRS})
 
-find_package( Eigen3 REQUIRED )
+find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
-include(FindOpenMP)
+find_package(OpenMP)
 if(OPENMP_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -36,6 +40,7 @@ endif(OPENMP_FOUND)
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 find_package(Threads REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS

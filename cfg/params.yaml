@@ -56,11 +56,11 @@ dlio:
         kcc: 10
     gicp:
       minNumPoints: 64
-      kCorrespondences: 16
-      maxCorrespondenceDistance: 0.5
-      maxIterations: 32
-      transformationEpsilon: 0.01
-      rotationEpsilon: 0.01
+      kCorrespondences: 32
+      maxCorrespondenceDistance: 2.0
+      maxIterations: 64
+      transformationEpsilon: 0.008
+      rotationEpsilon: 0.005
       initLambdaFactor: 1e-9
 
     geo:
