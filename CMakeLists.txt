@@ -13,7 +13,7 @@
 cmake_minimum_required(VERSION 3.4)
 project(direct_lidar_inertial_odometry)
 
-add_compile_options(-std=c++17)
+add_compile_options(-std=c++17 -O3 -mtune=native -march=native -funroll-loops -fopenmp -fopt-info-vec-optimized) #-funsafe-math-optimizations -funsafe-loop-optimizations
 set(CMAKE_BUILD_TYPE "Release")
 
 # PCL 1.10 is standard on Ubuntu 20.04

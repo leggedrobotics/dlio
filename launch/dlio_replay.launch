@@ -28,6 +28,7 @@
 
   <arg name="abliation_rotation_offset" default="0.0"/>
   <arg name="abliation_rotation_axis" default="x"/>
+  <arg name="gravity" default="9.80665"/>
 
   <!-- Options -->
   <!-- 
@@ -72,6 +73,7 @@
 
     <param name="abliation_rotation_offset" value="$(arg abliation_rotation_offset)"/>
     <param name="abliation_rotation_axis" value="$(arg abliation_rotation_axis)"/>
+    <param name="gravity" value="$(arg gravity)"/>
 
     <!-- Subscriptions -->
     <remap from="~pointcloud" to="$(arg pointcloud_topic)"/>

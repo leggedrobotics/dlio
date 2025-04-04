@@ -93,6 +93,8 @@ private:
   double abliation_time_offset_ = 0.0;
 
   double prev_stamp_ = 0.0;
+  double gravity_constant_ = 9.81;
+  const double kEpsilon = 1e-6;
   bool save_replayed_topics_to_rosbag_ = false;
   rosbag::Bag outputBag;
   std::mutex mRosBagMutex;

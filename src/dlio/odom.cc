@@ -539,13 +539,13 @@ void dlio::OdomNode::getBagData() {
           gyro_avg /= num_samples;
           accel_avg /= num_samples;
 
-          Eigen::Vector3f grav_vec (0., 0., this->gravity_);
+          Eigen::Vector3f grav_vec (0., 0., this->gravity_constant_);
 
           if (this->gravity_align_) {
 
             // Estimate gravity vector - Only approximate if biases have not been pre-calibrated
-            grav_vec = (accel_avg - this->state.b.accel).normalized() * abs(this->gravity_);
-            Eigen::Quaternionf grav_q = Eigen::Quaternionf::FromTwoVectors(grav_vec, Eigen::Vector3f(0., 0., this->gravity_));
+            grav_vec = (accel_avg - this->state.b.accel).normalized() * abs(this->gravity_constant_);
+            Eigen::Quaternionf grav_q = Eigen::Quaternionf::FromTwoVectors(grav_vec, Eigen::Vector3f(0., 0., this->gravity_constant_));
 
             // set gravity aligned orientation
             this->state.q = grav_q;
@@ -673,7 +673,8 @@ void dlio::OdomNode::getParams() {
   ros::param::param<bool>("~dlio/pointcloud/deskew", this->deskew_, true);
 
   // Gravity
-  ros::param::param<double>("~dlio/odom/gravity", this->gravity_, 9.80665);
+  // ros::param::param<double>("~dlio/odom/gravity", this->gravity_constant_, 9.80665);
+  ros::param::param<double>("~gravity", this->gravity_constant_, 9.80665);
 
   // Compute time offset between lidar and imu
   ros::param::param<bool>("~dlio/odom/computeTimeOffset", this->time_offset_, false);
@@ -1443,15 +1444,16 @@ void dlio::OdomNode::callbackPointCloud(const sensor_msgs::PointCloud2ConstPtr& 
   pcl::PointCloud<PointType>::ConstPtr published_cloud;
   published_cloud = this->deskewed_scan;
 
-  if (this->enablePublishing_)
-  {
-    this->publish_thread = std::thread( &dlio::OdomNode::publishToROS, this, published_cloud, this->T_corr, this->T);
-    this->publish_thread.detach();
-  }else{
+  // if (this->enablePublishing_)
+  // {
+  //   this->publish_thread = std::thread( &dlio::OdomNode::publishToROS, this, published_cloud, this->T_corr, this->T);
+  //   this->publish_thread.detach();
+  // }else{
 
-    this->publishToROS(published_cloud, this->T_corr, this->T);
+  //   this->publishToROS(published_cloud, this->T_corr, this->T);
 
-  }
+  // }
+  this->publishToROS(published_cloud, this->T_corr, this->T);
 
   // Update some statistics
   this->comp_times.push_back(ros::Time::now().toSec() - then);
@@ -1544,13 +1546,13 @@ void dlio::OdomNode::callbackImu(const sensor_msgs::Imu::ConstPtr& imu_raw) {
       gyro_avg /= num_samples;
       accel_avg /= num_samples;
 
-      Eigen::Vector3f grav_vec (0., 0., this->gravity_);
+      Eigen::Vector3f grav_vec (0., 0., this->gravity_constant_);
 
       if (this->gravity_align_) {
 
         // Estimate gravity vector - Only approximate if biases have not been pre-calibrated
-        grav_vec = (accel_avg - this->state.b.accel).normalized() * abs(this->gravity_);
-        Eigen::Quaternionf grav_q = Eigen::Quaternionf::FromTwoVectors(grav_vec, Eigen::Vector3f(0., 0., this->gravity_));
+        grav_vec = (accel_avg - this->state.b.accel).normalized() * abs(this->gravity_constant_);
+        Eigen::Quaternionf grav_q = Eigen::Quaternionf::FromTwoVectors(grav_vec, Eigen::Vector3f(0., 0., this->gravity_constant_));
 
         // set gravity aligned orientation
         this->state.q = grav_q;
@@ -1830,11 +1832,11 @@ dlio::OdomNode::integrateImu(double start_time, Eigen::Quaternionf q_init, Eigen
 
   // Acceleration at first IMU sample
   Eigen::Vector3f a1 = q_init._transformVector(f1.lin_accel);
-  a1[2] -= this->gravity_;
+  a1[2] -= this->gravity_constant_;
 
   // Acceleration at second IMU sample
   Eigen::Vector3f a2 = q2._transformVector(f2.lin_accel);
-  a2[2] -= this->gravity_;
+  a2[2] -= this->gravity_constant_;
 
   // Jerk between first two IMU samples
   Eigen::Vector3f j = (a2 - a1) / dt;
@@ -1861,7 +1863,7 @@ dlio::OdomNode::integrateImuInternal(Eigen::Quaternionf q_init, Eigen::Vector3f 
   Eigen::Vector3f p = p_init;
   Eigen::Vector3f v = v_init;
   Eigen::Vector3f a = q._transformVector(begin_imu_it->lin_accel);
-  a[2] -= this->gravity_;
+  a[2] -= this->gravity_constant_;
 
   // Iterate over IMU measurements and timestamps
   auto prev_imu_it = begin_imu_it;
@@ -1896,7 +1898,7 @@ dlio::OdomNode::integrateImuInternal(Eigen::Quaternionf q_init, Eigen::Vector3f 
     // Acceleration
     Eigen::Vector3f a0 = a;
     a = q._transformVector(f.lin_accel);
-    a[2] -= this->gravity_;
+    a[2] -= this->gravity_constant_;
 
     // Jerk
     Eigen::Vector3f j_dt = a - a0;
@@ -1962,11 +1964,11 @@ void dlio::OdomNode::propagateState() {
   // Accel propogation
   this->state.p[0] += this->state.v.lin.w[0]*dt + 0.5*dt*dt*world_accel[0];
   this->state.p[1] += this->state.v.lin.w[1]*dt + 0.5*dt*dt*world_accel[1];
-  this->state.p[2] += this->state.v.lin.w[2]*dt + 0.5*dt*dt*(world_accel[2] - this->gravity_);
+  this->state.p[2] += this->state.v.lin.w[2]*dt + 0.5*dt*dt*(world_accel[2] - this->gravity_constant_);
 
   this->state.v.lin.w[0] += world_accel[0]*dt;
   this->state.v.lin.w[1] += world_accel[1]*dt;
-  this->state.v.lin.w[2] += (world_accel[2] - this->gravity_)*dt;
+  this->state.v.lin.w[2] += (world_accel[2] - this->gravity_constant_)*dt;
   this->state.v.lin.b = this->state.q.toRotationMatrix().inverse() * this->state.v.lin.w;
 
   // Gyro propogation
@@ -2045,49 +2047,55 @@ void dlio::OdomNode::updateState() {
 }
 
 sensor_msgs::Imu::Ptr dlio::OdomNode::transformImu(const sensor_msgs::Imu::ConstPtr& imu_raw) {
-
-  sensor_msgs::Imu::Ptr imu (new sensor_msgs::Imu);
-
-  double stamptAsSec = imu_raw->header.stamp.toSec();
+  sensor_msgs::Imu::Ptr imu(new sensor_msgs::Imu);
   imu->header = imu_raw->header;
 
-  if (prev_stamp_ == 0){
-    prev_stamp_ = stamptAsSec;
-  }
+  // Get current timestamp
+  double current_stamp = imu_raw->header.stamp.toSec();
   
-
-  double dt = stamptAsSec - prev_stamp_;
-  prev_stamp_ = stamptAsSec;
-  
-  if (dt == 0) {
-    ROS_FATAL("IMU timestamp difference is zero. Using rough estimate for dt.");
-    dt = this->rough_dt; 
+  // Compute dt. For the first message, or if dt is too small/negative, use rough_dt.
+  double dt = (prev_stamp_ == 0.0) ? this->rough_dt : (current_stamp - prev_stamp_);
+  if (dt <= 0) {
+    ROS_FATAL("IMU timestamp difference is too small or negative. Using rough estimate for dt. (Can be expeced in the beginning)");
+    dt = this->rough_dt;
   }
+  prev_stamp_ = current_stamp;
 
-  // Transform angular velocity (will be the same on a rigid body, so just rotate to ROS convention)
+  // Transform angular velocity.
   Eigen::Vector3f ang_vel(imu_raw->angular_velocity.x,
                           imu_raw->angular_velocity.y,
                           imu_raw->angular_velocity.z);
-
-  Eigen::Vector3f ang_vel_cg = this->extrinsics.baselink2imu.R * ang_vel;
-
+  Eigen::Vector3f ang_vel_cg;
+  bool is_identity = this->extrinsics.baselink2imu.R.isApprox(Eigen::Matrix3f::Identity(), this->kEpsilon);
+  // Skip matrix multiplication if the rotation is identity.
+  if (is_identity) {
+    ang_vel_cg = ang_vel;
+  } else {
+    ang_vel_cg = this->extrinsics.baselink2imu.R * ang_vel;
+  }
   imu->angular_velocity.x = ang_vel_cg[0];
   imu->angular_velocity.y = ang_vel_cg[1];
   imu->angular_velocity.z = ang_vel_cg[2];
 
+  // Use a static variable to hold the previous transformed angular velocity.
   static Eigen::Vector3f ang_vel_cg_prev = ang_vel_cg;
 
-  // Transform linear acceleration (need to account for component due to translational difference)
+  // Transform linear acceleration.
   Eigen::Vector3f lin_accel(imu_raw->linear_acceleration.x,
                             imu_raw->linear_acceleration.y,
                             imu_raw->linear_acceleration.z);
+  Eigen::Vector3f lin_accel_cg;
+  if (is_identity) {
+    lin_accel_cg = lin_accel;
+  } else {
+    lin_accel_cg = this->extrinsics.baselink2imu.R * lin_accel;
+  }
 
-  Eigen::Vector3f lin_accel_cg = this->extrinsics.baselink2imu.R * lin_accel;
-
-  lin_accel_cg = lin_accel_cg
-                 + ((ang_vel_cg - ang_vel_cg_prev) / this->rough_dt).cross(-this->extrinsics.baselink2imu.t)
-                 + ang_vel_cg.cross(ang_vel_cg.cross(-this->extrinsics.baselink2imu.t));
-
+  // Apply corrections for the translational difference.
+  // First term: time derivative of angular velocity cross translation.
+  // Second term: centripetal acceleration correction.
+  lin_accel_cg += ((ang_vel_cg - ang_vel_cg_prev) / dt).cross(-this->extrinsics.baselink2imu.t)
+                  + ang_vel_cg.cross(ang_vel_cg.cross(-this->extrinsics.baselink2imu.t));
   ang_vel_cg_prev = ang_vel_cg;
 
   imu->linear_acceleration.x = lin_accel_cg[0];
