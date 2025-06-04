@@ -13,13 +13,13 @@
 dlio:
 
   frames:
-    odom: odom
-    baselink: base_link
-    lidar: lidar
-    imu: imu
+    odom: dlio_odom
+    baselink: perception_kit
+    lidar: PandarXT32
+    imu: imu_perception_kit_link
 
   map:
-    waitUntilMove: true
+    waitUntilMove: false
     dense:
       filtered: false
     sparse:

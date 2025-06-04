@@ -33,7 +33,7 @@ dlio::MapNode::~MapNode() {}
 
 void dlio::MapNode::getParams() {
 
-  ros::param::param<std::string>("~dlio/odom/odom_frame", this->odom_frame, "odom");
+  ros::param::param<std::string>("~dlio/frames/odom", this->odom_frame, "odom");
   ros::param::param<double>("~dlio/map/sparse/leafSize", this->leaf_size_, 0.5);
 
   // Get Node NS and Remove Leading Character
@@ -41,7 +41,7 @@ void dlio::MapNode::getParams() {
   ns.erase(0,1);
 
   // Concatenate Frame Name Strings
-  this->odom_frame = ns + "/" + this->odom_frame;
+  this->odom_frame = this->odom_frame;
 
 }
 
