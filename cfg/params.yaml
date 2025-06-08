@@ -13,8 +13,8 @@
 dlio:
 
   frames:
-    odom: dlio_odom
-    baselink: perception_kit
+    odom: odom
+    baselink: main_sensor_setup
     lidar: PandarXT32
     imu: imu_perception_kit_link
 
