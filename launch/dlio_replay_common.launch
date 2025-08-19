@@ -14,10 +14,10 @@
   <!-- Input topics. Is rosbag is provided, frame names / calibration / rates will be read automatically. -->
 
   <!-- Options -->
-  <arg name="pointcloud_topic" default="/gt_box/hesai/points"/> 
-  <!-- <arg name="pointcloud_topic" default="/gt_box/livox/lidar"/> -->
+  <arg name="pointcloud_topic" default="/boxi/livox/points"/> 
+  <!-- <arg name="pointcloud_topic" default="/boxi/livox/points"/> -->
 
-  <arg name="imu_topic" default="/gt_box/cpt7/offline_from_novatel_logs/imu"/>
+  <arg name="imu_topic" default="/boxi/cpt7/imu"/>
 
   <!-- Time offset to IMU for abliations , in micro seconds -->
   <arg name="abliation_time_offset" default="0.0"/>

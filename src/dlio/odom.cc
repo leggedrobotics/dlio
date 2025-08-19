@@ -1134,22 +1134,29 @@ void dlio::OdomNode::getScanFromROS(const sensor_msgs::PointCloud2ConstPtr& pc) 
   this->crop.filter(*original_scan_);
 
   // automatically detect sensor type
-  this->sensor = dlio::SensorType::UNKNOWN;
-  for (auto &field : pc->fields) {
-    if (field.name == "t") {
-      this->sensor = dlio::SensorType::OUSTER;
-      break;
-    } else if (field.name == "time") {
-      this->sensor = dlio::SensorType::VELODYNE;
-      break;
-    } else if (field.name == "timestamp" && original_scan_->points[0].timestamp < 1e14) {
-      // ROS_INFO("Detected sensor type: Hesai");
-      this->sensor = dlio::SensorType::HESAI;
-      break;
-    } else if (field.name == "timestamp" && original_scan_->points[0].timestamp > 1e14) {
-      this->sensor = dlio::SensorType::LIVOX;
-      break;
+  if (this->sensor == dlio::SensorType::UNKNOWN && this->deskew_) {
+
+    for (auto &field : pc->fields) {
+      if (field.name == "t") {
+        this->sensor = dlio::SensorType::OUSTER;
+        ROS_INFO("Detected sensor type: Ouster");
+        break;
+      } else if (field.name == "time") {
+        this->sensor = dlio::SensorType::VELODYNE;
+        ROS_INFO("Detected sensor type: Velodyne");
+        break;
+      } else if (field.name == "timestamp" && original_scan_->points[0].timestamp < 1e14) {
+        // ROS_INFO("Detected sensor type: Hesai");
+        ROS_INFO("Detected sensor type: Hesai");
+        this->sensor = dlio::SensorType::HESAI;
+        break;
+      } else if (field.name == "timestamp" && original_scan_->points[0].timestamp > 1e14) {
+        ROS_INFO("Detected sensor type: Livox");
+        this->sensor = dlio::SensorType::LIVOX;
+        break;
+      }
     }
+
   }
 
   if (this->sensor == dlio::SensorType::UNKNOWN) {
@@ -1270,8 +1277,6 @@ void dlio::OdomNode::deskewPointcloud() {
   }
   unique_time_indices.push_back(deskewed_scan_->points.size());
 
-  // int median_pt_index = timestamps.size() / 2;
-  // this->scan_stamp = timestamps[median_pt_index]; // set this->scan_stamp to the timestamp of the median point
   this->scan_stamp = timestamps[0];
 
   // don't process scans until IMU data is present

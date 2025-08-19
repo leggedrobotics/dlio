@@ -179,7 +179,7 @@ private:
   std::mutex keyframes_mutex;
 
   // Sensor Type
-  dlio::SensorType sensor;
+  dlio::SensorType sensor = dlio::SensorType::UNKNOWN;
 
   // Frames
   std::string odom_frame;

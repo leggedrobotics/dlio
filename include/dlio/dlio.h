@@ -85,7 +85,6 @@ std::string to_string_with_precision(const T a_value, const int n = 6)
 
 // DLIO
 #include <nano_gicp/nano_gicp.h>
-// #include <direct_lidar_inertial_odometry/save_pcd.h>
 
 namespace dlio {
   enum class SensorType { OUSTER, VELODYNE, HESAI, LIVOX, UNKNOWN };
@@ -98,7 +97,11 @@ namespace dlio {
 
     PCL_ADD_POINT4D;
     float intensity; // intensity
+    std::uint32_t tag; // tag for point cloud (e.g., ring number for Velodyne, scan number for Ouster)
+    std::uint32_t line;
+
     union {
+    
     std::uint32_t t;   // (Ouster) time since beginning of scan in nanoseconds
     float time;        // (Velodyne) time since beginning of scan in seconds
     double timestamp;  // (Hesai) absolute timestamp in seconds
@@ -114,6 +117,8 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(dlio::Point,
                                  (float, z, z)
                                  (float, intensity, intensity)
                                  (std::uint32_t, t, t)
+                                 (std::uint32_t, tag, tag)
+                                 (std::uint32_t, line, line)
                                  (float, time, time)
                                  (double, timestamp, timestamp))
 
