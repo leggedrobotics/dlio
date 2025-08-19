@@ -32,6 +32,9 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
   this->imu_sub = this->nh.subscribe("imu", 500,
       &dlio::OdomNode::callbackImu, this, ros::TransportHints().tcpNoDelay());
 
+  this->livox_sub = this->nh.subscribe("livox", 1,
+      &dlio::OdomNode::callbackLivox, this, ros::TransportHints().tcpNoDelay());
+
   this->registration_odom_pub     = this->nh.advertise<nav_msgs::Odometry>("lidar_map_odometry", 10, true);
   this->odom_pub     = this->nh.advertise<nav_msgs::Odometry>("lidar_odometry", 10, true);
   this->pose_pub     = this->nh.advertise<geometry_msgs::PoseStamped>("lidar_odometry_as_posestamped", 10, true);
@@ -42,6 +45,7 @@ dlio::OdomNode::OdomNode(ros::NodeHandle node_handle) : nh(node_handle) {
     this->kf_pose_pub  = this->nh.advertise<geometry_msgs::PoseArray>("kf_pose", 10, true);
     this->kf_cloud_pub = this->nh.advertise<sensor_msgs::PointCloud2>("kf_cloud", 10, true);
     this->deskewed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed", 10, true);
+    this->livox_pub    = this->nh.advertise<sensor_msgs::PointCloud2>("livox2dlio", 1, true);
   }
   this->deskewed_but_not_transformed_pub = this->nh.advertise<sensor_msgs::PointCloud2>("deskewed_point_cloud", 10, true);
 
@@ -253,7 +257,7 @@ void dlio::OdomNode::getBagData() {
 
   this->inputBag.open(this->inputBagPath_, rosbag::bagmode::Read);
   std::vector<std::string> viewtopics;
-  viewtopics.push_back("/tf_static");
+  // viewtopics.push_back("/tf_static");
   viewtopics.push_back(this->lidarTopic_);
   viewtopics.push_back(this->imuTopic_);
 
@@ -388,96 +392,103 @@ void dlio::OdomNode::getBagData() {
 
   }
 
+    // // Set extrinsics.baselink2imu.t from fixed values (in meters)
+    // this->extrinsics.baselink2imu.t = Eigen::Vector3f(
+    //   0.011,    // x = 11.0 mm
+    //   0.02329,  // y = 23.29 mm
+    //   -0.04412  // z = -44.12 mm
+    // );
+
+    // Eigen::Quaternionf q = Eigen::Quaternionf::Identity();
+    // // q.normalize();
+    // this->extrinsics.baselink2imu.R = q.toRotationMatrix();
+
   // Create a tf2 buffer and transform listener
-  tf2_ros::Buffer tf_buffer;
-  tf2_ros::TransformListener tf_listener(tf_buffer);
+  // tf2_ros::Buffer tf_buffer;
+  // tf2_ros::TransformListener tf_listener(tf_buffer);
 
-  {
-    rosbag::View view(this->inputBag, rosbag::TopicQuery("/tf_static"));
+  // {
+  //   rosbag::View view(this->inputBag, rosbag::TopicQuery("/tf_static"));
 
-    for (const rosbag::MessageInstance& m : view) {
+  //   for (const rosbag::MessageInstance& m : view) {
 
-      tf2_msgs::TFMessage::ConstPtr tf_static_msg = m.instantiate<tf2_msgs::TFMessage>();
-      if (tf_static_msg != nullptr) {
-        for (const geometry_msgs::TransformStamped& transform : tf_static_msg->transforms) {
+  //     tf2_msgs::TFMessage::ConstPtr tf_static_msg = m.instantiate<tf2_msgs::TFMessage>();
+  //     if (tf_static_msg != nullptr) {
+  //       for (const geometry_msgs::TransformStamped& transform : tf_static_msg->transforms) {
           
-          // Populate the static transform buffer
-          tf_buffer.setTransform(transform, "default_authority", true);
-        }
+  //         // Populate the static transform buffer
+  //         tf_buffer.setTransform(transform, "default_authority", true);
+  //       }
 
-      }else{
-        ROS_ERROR_STREAM("Failed to get tf_static");
-        throw std::runtime_error("Failed to get tf_static");
-      }
+  //     }else{
+  //       ROS_ERROR_STREAM("Failed to get tf_static");
+  //       throw std::runtime_error("Failed to get tf_static");
+  //     }
 
-      // There might be multiple tf_static messages in the bag
-      break;
-    }
+  //     // There might be multiple tf_static messages in the bag
+  //     break;
+  //   }
 
-    try {
-    geometry_msgs::TransformStamped lookup_transform;
-    lookup_transform = tf_buffer.lookupTransform(this->lidar_frame, this->imu_frame, ros::Time(0), ros::Duration(1.0));
+  //   try {
+  //   geometry_msgs::TransformStamped lookup_transform;
+  //   lookup_transform = tf_buffer.lookupTransform(this->lidar_frame, this->imu_frame, ros::Time(0), ros::Duration(1.0));
 
-    this->extrinsics.baselink2imu.t = Eigen::Vector3f(
-      lookup_transform.transform.translation.x,
-      lookup_transform.transform.translation.y,
-      lookup_transform.transform.translation.z
-    );
+  //   // Set extrinsics.baselink2imu.t from fixed values (in meters)
+  //   this->extrinsics.baselink2imu.t = Eigen::Vector3f(
+  //     0.011,    // x = 11.0 mm
+  //     0.02329,  // y = 23.29 mm
+  //     -0.04412  // z = -44.12 mm
+  //   );
 
-    Eigen::Quaternionf q(
-      lookup_transform.transform.rotation.w,
-      lookup_transform.transform.rotation.x,
-      lookup_transform.transform.rotation.y,
-      lookup_transform.transform.rotation.z
-    );
-    q.normalize();
-    this->extrinsics.baselink2imu.R = q.toRotationMatrix();
+  //   Eigen::Quaternionf q = Eigen::Quaternionf::Identity();
+  //   // q.normalize();
+  //   this->extrinsics.baselink2imu.R = q.toRotationMatrix();
 
-    ROS_INFO_STREAM("\033[95m" <<"Transform set from " << this->lidar_frame << " to " << this->imu_frame << "\033[0m");
+  //   ROS_INFO_STREAM("\033[95m" <<"Transform set from " << this->lidar_frame << " to " << this->imu_frame << "\033[0m");
 
-    }
-    catch (tf2::TransformException& ex) {
-      ROS_ERROR_STREAM("Possibly the tf_static msg is not read correctly. We are looking for " << this->lidar_frame << " to " << this->imu_frame);
-      ROS_ERROR("Transform exception: %s", ex.what());
-      throw std::runtime_error("Failed to get the transforms from tf_static");
-    }
+  //   }
+  //   catch (tf2::TransformException& ex) {
+  //     ROS_ERROR_STREAM("Possibly the tf_static msg is not read correctly. We are looking for " << this->lidar_frame << " to " << this->imu_frame);
+  //     ROS_ERROR("Transform exception: %s", ex.what());
+  //     throw std::runtime_error("Failed to get the transforms from tf_static");
+  //   }
 
-  }
+  // }
 
-  // If an abliation offset is set then apply it
-  if ((this->abliation_translation_offset != 0.0) || (this->abliation_rotation_offset != 0.0)) {
+  // // If an abliation offset is set then apply it
+  // if ((this->abliation_translation_offset != 0.0) || (this->abliation_rotation_offset != 0.0)) {
 
-    if (this->abliation_translation_axis == "x") {
-      this->extrinsics.baselink2lidar_T(0, 3) += this->abliation_translation_offset;
-        } else if (this->abliation_translation_axis == "y") {
-      this->extrinsics.baselink2lidar_T(1, 3) += this->abliation_translation_offset;
-        } else if (this->abliation_translation_axis == "z") {
-      this->extrinsics.baselink2lidar_T(2, 3) += this->abliation_translation_offset;
-    } else {
-      ROS_ERROR_STREAM("Invalid translation axis for ablation study.");
-      throw std::runtime_error("Invalid translation axis for ablation study.");
-    }
+  //   if (this->abliation_translation_axis == "x") {
+  //     this->extrinsics.baselink2lidar_T(0, 3) += this->abliation_translation_offset;
+  //       } else if (this->abliation_translation_axis == "y") {
+  //     this->extrinsics.baselink2lidar_T(1, 3) += this->abliation_translation_offset;
+  //       } else if (this->abliation_translation_axis == "z") {
+  //     this->extrinsics.baselink2lidar_T(2, 3) += this->abliation_translation_offset;
+  //   } else {
+  //     ROS_ERROR_STREAM("Invalid translation axis for ablation study.");
+  //     throw std::runtime_error("Invalid translation axis for ablation study.");
+  //   }
 
-    Eigen::Matrix3f rotation_matrix = Eigen::Matrix3f::Identity();
-    float angle_rad = this->abliation_rotation_offset * M_PI / 180.0;
+  //   Eigen::Matrix3f rotation_matrix = Eigen::Matrix3f::Identity();
+  //   float angle_rad = this->abliation_rotation_offset * M_PI / 180.0;
 
-    if (this->abliation_rotation_axis == "x") {
-      rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitX()).toRotationMatrix();
-    } else if (this->abliation_rotation_axis == "y") {
-      rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitY()).toRotationMatrix();
-    } else if (this->abliation_rotation_axis == "z") {
-      rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitZ()).toRotationMatrix();
-    }else {
-      ROS_ERROR_STREAM("Invalid rotation axis for ablation study.");
-      throw std::runtime_error("Invalid rotation axis for ablation study.");
-    }
+  //   if (this->abliation_rotation_axis == "x") {
+  //     rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitX()).toRotationMatrix();
+  //   } else if (this->abliation_rotation_axis == "y") {
+  //     rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitY()).toRotationMatrix();
+  //   } else if (this->abliation_rotation_axis == "z") {
+  //     rotation_matrix = Eigen::AngleAxisf(angle_rad, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+  //   }else {
+  //     ROS_ERROR_STREAM("Invalid rotation axis for ablation study.");
+  //     throw std::runtime_error("Invalid rotation axis for ablation study.");
+  //   }
 
-    this->extrinsics.baselink2lidar_T.block<3, 3>(0, 0) = rotation_matrix * this->extrinsics.baselink2lidar_T.block<3, 3>(0, 0);
+  //   this->extrinsics.baselink2lidar_T.block<3, 3>(0, 0) = rotation_matrix * this->extrinsics.baselink2lidar_T.block<3, 3>(0, 0);
 
-    ROS_WARN_STREAM("Ablation is enabled Extrinsics (baselink to IMU) are offsetted:");
-    ROS_WARN_STREAM("Translation [x, y, z]: " << this->extrinsics.baselink2lidar_T);
-    // ROS_WARN_STREAM("Rotation Matrix:\n" << this->extrinsics.baselink2lidar_T.R);
-  }
+  //   ROS_WARN_STREAM("Ablation is enabled Extrinsics (baselink to IMU) are offsetted:");
+  //   ROS_WARN_STREAM("Translation [x, y, z]: " << this->extrinsics.baselink2lidar_T);
+  //   // ROS_WARN_STREAM("Rotation Matrix:\n" << this->extrinsics.baselink2lidar_T.R);
+  // }
 
 
   // Calibrate the IMU
@@ -752,6 +763,7 @@ void dlio::OdomNode::getParams() {
   }
   ros::param::param<bool>("~dlio/odom/imu/approximateGravity", this->gravity_align_, true);
   ros::param::param<bool>("~dlio/imu/calibration", this->imu_calibrate_, true);
+  ros::param::param<bool>("~dlio/imu/normalized", this->imu_normalized_, true);
   ros::param::param<std::vector<float>>("~dlio/imu/intrinsics/accel/bias", prior_accel_bias, accel_default);
   ros::param::param<std::vector<float>>("~dlio/imu/intrinsics/gyro/bias", prior_gyro_bias, gyro_default);
 
@@ -1148,6 +1160,11 @@ void dlio::OdomNode::getScanFromROS(const sensor_msgs::PointCloud2ConstPtr& pc) 
       break;
     } else if (field.name == "timestamp" && original_scan_->points[0].timestamp > 1e14) {
       this->sensor = dlio::SensorType::LIVOX;
+      ROS_INFO("Detected sensor type: Livox");
+      break;
+    }else if (field.name == "offset_time") {
+      this->sensor = dlio::SensorType::LIVOX_CUSTOM;
+      ROS_INFO("Detected sensor type: Livox Custom");
       break;
     }
   }
@@ -1197,6 +1214,24 @@ void dlio::OdomNode::deskewPointcloud() {
 
   // individual point timestamps should be relative to this time
   double sweep_ref_time = this->scan_header_stamp.toSec();
+  // for (size_t i = 0; i < std::min<size_t>(5, this->original_scan->points.size()); ++i) {
+  //   const auto& pt = this->original_scan->points[i];
+  //   std::cout << "Point " << i << ": ";
+  //   std::cout << "x=" << pt.x << ", y=" << pt.y << ", z=" << pt.z;
+  //   if constexpr (std::is_member_object_pointer<decltype(&PointType::intensity)>::value) {
+  //     std::cout << ", intensity=" << pt.intensity;
+  //   }
+  //   if constexpr (std::is_member_object_pointer<decltype(&PointType::t)>::value) {
+  //     std::cout << ", t=" << pt.t;
+  //   }
+  //   if constexpr (std::is_member_object_pointer<decltype(&PointType::time)>::value) {
+  //     std::cout << ", time=" << pt.time;
+  //   }
+  //   if constexpr (std::is_member_object_pointer<decltype(&PointType::timestamp)>::value) {
+  //     std::cout << ", timestamp=" << pt.timestamp;
+  //   }
+  //   std::cout << std::endl;
+  // }
 
   // sort points by timestamp and build list of timestamps
   std::function<bool(const PointType&, const PointType&)> point_time_cmp;
@@ -1242,7 +1277,17 @@ void dlio::OdomNode::deskewPointcloud() {
       { return p1.value().timestamp != p2.value().timestamp; };
     extract_point_time = [&sweep_ref_time](boost::range::index_value<PointType&, long> pt)
       { return pt.value().timestamp * 1e-9f; };
-  }
+  }else if (this->sensor == dlio::SensorType::LIVOX_CUSTOM) {
+
+    point_time_cmp = [](const PointType& p1, const PointType& p2)
+      { return p1.offset_time < p2.offset_time; };
+    point_time_neq = [](boost::range::index_value<PointType&, long> p1,
+                        boost::range::index_value<PointType&, long> p2)
+      { return p1.value().offset_time != p2.value().offset_time; };
+    extract_point_time = [&sweep_ref_time](boost::range::index_value<PointType&, long> pt)
+      { return sweep_ref_time + pt.value().offset_time * 1e-9f; };
+
+  } 
 
   // copy points into deskewed_scan_ in order of timestamp
   std::partial_sort_copy(this->original_scan->points.begin(), this->original_scan->points.end(),
@@ -1359,6 +1404,34 @@ void dlio::OdomNode::initializeDLIO() {
   std::cout << std::endl << " DLIO initialized!" << std::endl;
 
 }
+
+void dlio::OdomNode::callbackLivox(const livox_ros_driver2::CustomMsgConstPtr& livox) {
+
+  // convert custom livox message to pcl pointcloud
+  pcl::PointCloud<LivoxPoint>::Ptr cloud (new pcl::PointCloud<LivoxPoint>);
+
+  for (int i = 0; i < livox->point_num; i++) {
+    LivoxPoint p;
+    p.x = livox->points[i].x;
+    p.y = livox->points[i].y;
+    p.z = livox->points[i].z;
+    p.intensity = livox->points[i].reflectivity;
+    p.offset_time = livox->points[i].offset_time;
+    cloud->push_back(p);
+  }
+
+  // publish converted livox pointcloud
+  sensor_msgs::PointCloud2 cloud_ros;
+  pcl::toROSMsg(*cloud, cloud_ros);
+
+  cloud_ros.header.stamp = livox->header.stamp;
+  cloud_ros.header.seq = livox->header.seq;
+  cloud_ros.header.frame_id = this->lidar_frame;
+  this->livox_pub.publish(cloud_ros);
+
+}
+
+
 
 void dlio::OdomNode::callbackPointCloud(const sensor_msgs::PointCloud2ConstPtr& pc) {
 
@@ -1505,9 +1578,16 @@ void dlio::OdomNode::callbackImu(const sensor_msgs::Imu::ConstPtr& imu_raw) {
   ang_vel[1] = imu->angular_velocity.y;
   ang_vel[2] = imu->angular_velocity.z;
 
-  lin_accel[0] = imu->linear_acceleration.x;
-  lin_accel[1] = imu->linear_acceleration.y;
-  lin_accel[2] = imu->linear_acceleration.z;
+  if (this->imu_normalized_) {
+    lin_accel[0] = imu->linear_acceleration.x * this->gravity_;
+    lin_accel[1] = imu->linear_acceleration.y * this->gravity_;
+    lin_accel[2] = imu->linear_acceleration.z * this->gravity_;
+  } else {
+    lin_accel[0] = imu->linear_acceleration.x;
+    lin_accel[1] = imu->linear_acceleration.y;
+    lin_accel[2] = imu->linear_acceleration.z;
+  }
+
 
   if (this->first_imu_stamp == 0.) {
     this->first_imu_stamp = imu->header.stamp.toSec();
@@ -2630,7 +2710,12 @@ void dlio::OdomNode::debug() {
       << "Sensor Rates: Velodyne @ " + to_string_with_precision(avg_lidar_rate, 2)
                                      + " Hz, IMU @ " + to_string_with_precision(avg_imu_rate, 2) + " Hz"
       << "|" << std::endl;
-  } else if (this->sensor == dlio::SensorType::HESAI) {
+  }  else if (this->sensor == dlio::SensorType::LIVOX_CUSTOM) {
+    std::cout << "| " << std::left << std::setfill(' ') << std::setw(66)
+      << "Sensor Rates: Livox Custom @ " + to_string_with_precision(avg_lidar_rate, 2)
+                                  + " Hz, IMU @ " + to_string_with_precision(avg_imu_rate, 2) + " Hz"
+      << "|" << std::endl;
+  }else if (this->sensor == dlio::SensorType::HESAI) {
     std::cout << "| " << std::left << std::setfill(' ') << std::setw(66)
       << "Sensor Rates: Hesai @ " + to_string_with_precision(avg_lidar_rate, 2)
                                   + " Hz, IMU @ " + to_string_with_precision(avg_imu_rate, 2) + " Hz"

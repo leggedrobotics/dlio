@@ -30,6 +30,7 @@ private:
 
   void callbackPointCloud(const sensor_msgs::PointCloud2ConstPtr& pc);
   void callbackImu(const sensor_msgs::Imu::ConstPtr& imu);
+  void callbackLivox(const livox_ros_driver2::CustomMsgConstPtr& livox);
 
   void publishPose(const ros::TimerEvent& e);
 
@@ -130,6 +131,7 @@ private:
   // Subscribers
   ros::Subscriber lidar_sub;
   ros::Subscriber imu_sub;
+  ros::Subscriber livox_sub;
 
   // Publishers
   ros::Publisher registration_odom_pub;
@@ -140,6 +142,7 @@ private:
   ros::Publisher kf_pose_pub;
   ros::Publisher kf_cloud_pub;
   ros::Publisher deskewed_pub;
+  ros::Publisher livox_pub;
   ros::Publisher deskewed_but_not_transformed_pub;
 
   // ROS Msgs
@@ -368,6 +371,7 @@ private:
   bool calibrate_accel_;
   int imu_rate_;
   bool gravity_align_;
+  bool imu_normalized_;
   double imu_calib_time_;
   int imu_buffer_size_;
   Eigen::Matrix3f imu_accel_sm_;

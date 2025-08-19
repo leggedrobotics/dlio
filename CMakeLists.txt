@@ -46,6 +46,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   pcl_ros
   # message_generation
+  livox_ros_driver2
 )
 
 # Commented for in-docker build issue.

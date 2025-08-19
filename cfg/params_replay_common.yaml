@@ -42,7 +42,7 @@ dlio:
 
     preprocessing:
       cropBoxFilter:
-        size: 1.0
+        size: 0.1
       voxelFilter:
         res: 0.1
 
@@ -56,10 +56,10 @@ dlio:
         kcv: 10
         kcc: 10
     gicp:
-      minNumPoints: 64
-      kCorrespondences: 32
+      minNumPoints: 128
+      kCorrespondences: 64
       maxCorrespondenceDistance: 0.5
-      maxIterations: 32
+      maxIterations: 64
       transformationEpsilon: 0.008
       rotationEpsilon: 0.005
       initLambdaFactor: 1e-9
