@@ -253,7 +253,7 @@ void dlio::OdomNode::getBagData() {
 
   this->inputBag.open(this->inputBagPath_, rosbag::bagmode::Read);
   std::vector<std::string> viewtopics;
-  viewtopics.push_back("/tf_static");
+  // viewtopics.push_back("/tf_static");
   viewtopics.push_back(this->lidarTopic_);
   viewtopics.push_back(this->imuTopic_);
 
@@ -388,61 +388,77 @@ void dlio::OdomNode::getBagData() {
 
   }
 
-  // Create a tf2 buffer and transform listener
-  tf2_ros::Buffer tf_buffer;
-  tf2_ros::TransformListener tf_listener(tf_buffer);
+  // // Create a tf2 buffer and transform listener
+  // tf2_ros::Buffer tf_buffer;
+  // tf2_ros::TransformListener tf_listener(tf_buffer);
 
-  {
-    rosbag::View view(this->inputBag, rosbag::TopicQuery("/tf_static"));
+  // {
+  //   rosbag::View view(this->inputBag, rosbag::TopicQuery("/tf_static"));
 
-    for (const rosbag::MessageInstance& m : view) {
+  //   for (const rosbag::MessageInstance& m : view) {
 
-      tf2_msgs::TFMessage::ConstPtr tf_static_msg = m.instantiate<tf2_msgs::TFMessage>();
-      if (tf_static_msg != nullptr) {
-        for (const geometry_msgs::TransformStamped& transform : tf_static_msg->transforms) {
+  //     tf2_msgs::TFMessage::ConstPtr tf_static_msg = m.instantiate<tf2_msgs::TFMessage>();
+  //     if (tf_static_msg != nullptr) {
+  //       for (const geometry_msgs::TransformStamped& transform : tf_static_msg->transforms) {
           
-          // Populate the static transform buffer
-          tf_buffer.setTransform(transform, "default_authority", true);
-        }
+  //         // Populate the static transform buffer
+  //         tf_buffer.setTransform(transform, "default_authority", true);
+  //       }
 
-      }else{
-        ROS_ERROR_STREAM("Failed to get tf_static");
-        throw std::runtime_error("Failed to get tf_static");
-      }
+  //     }else{
+  //       ROS_ERROR_STREAM("Failed to get tf_static");
+  //       throw std::runtime_error("Failed to get tf_static");
+  //     }
 
-      // There might be multiple tf_static messages in the bag
-      break;
-    }
+  //     // There might be multiple tf_static messages in the bag
+  //     break;
+  //   }
 
-    try {
-    geometry_msgs::TransformStamped lookup_transform;
-    lookup_transform = tf_buffer.lookupTransform(this->lidar_frame, this->imu_frame, ros::Time(0), ros::Duration(1.0));
+  //   try {
+  //   geometry_msgs::TransformStamped lookup_transform;
+  //   lookup_transform = tf_buffer.lookupTransform(this->lidar_frame, this->imu_frame, ros::Time(0), ros::Duration(1.0));
 
-    this->extrinsics.baselink2imu.t = Eigen::Vector3f(
-      lookup_transform.transform.translation.x,
-      lookup_transform.transform.translation.y,
-      lookup_transform.transform.translation.z
-    );
+  //   this->extrinsics.baselink2imu.t = Eigen::Vector3f(
+  //     lookup_transform.transform.translation.x,
+  //     lookup_transform.transform.translation.y,
+  //     lookup_transform.transform.translation.z
+  //   );
 
-    Eigen::Quaternionf q(
-      lookup_transform.transform.rotation.w,
-      lookup_transform.transform.rotation.x,
-      lookup_transform.transform.rotation.y,
-      lookup_transform.transform.rotation.z
-    );
-    q.normalize();
-    this->extrinsics.baselink2imu.R = q.toRotationMatrix();
+  //   Eigen::Quaternionf q(
+  //     lookup_transform.transform.rotation.w,
+  //     lookup_transform.transform.rotation.x,
+  //     lookup_transform.transform.rotation.y,
+  //     lookup_transform.transform.rotation.z
+  //   );
+  //   q.normalize();
+  //   this->extrinsics.baselink2imu.R = q.toRotationMatrix();
 
-    ROS_INFO_STREAM("\033[95m" <<"Transform set from " << this->lidar_frame << " to " << this->imu_frame << "\033[0m");
+  //   ROS_INFO_STREAM("\033[95m" <<"Transform set from " << this->lidar_frame << " to " << this->imu_frame << "\033[0m");
 
-    }
-    catch (tf2::TransformException& ex) {
-      ROS_ERROR_STREAM("Possibly the tf_static msg is not read correctly. We are looking for " << this->lidar_frame << " to " << this->imu_frame);
-      ROS_ERROR("Transform exception: %s", ex.what());
-      throw std::runtime_error("Failed to get the transforms from tf_static");
-    }
+  //   }
+  //   catch (tf2::TransformException& ex) {
+  //     ROS_ERROR_STREAM("Possibly the tf_static msg is not read correctly. We are looking for " << this->lidar_frame << " to " << this->imu_frame);
+  //     ROS_ERROR("Transform exception: %s", ex.what());
+  //     throw std::runtime_error("Failed to get the transforms from tf_static");
+  //   }
 
-  }
+  // }
+
+  this->extrinsics.baselink2imu.t = Eigen::Vector3f(
+    0.006f,
+    0.018f,
+    0.066f
+  );
+
+  Eigen::Quaternionf q;
+  q.w() = -0.707f;
+  q.x() = 0.0f;
+  q.y() = 0.0f;
+  q.z() = -0.707f;
+  q.normalize();
+
+  this->extrinsics.baselink2imu.R = q.toRotationMatrix();
+
 
   // If an abliation offset is set then apply it
   if ((this->abliation_translation_offset != 0.0) || (this->abliation_rotation_offset != 0.0)) {
@@ -1275,6 +1291,7 @@ void dlio::OdomNode::deskewPointcloud() {
     timestamps.push_back(extract_point_time(*it) + offset);
     unique_time_indices.push_back(it->index());
   }
+  
   unique_time_indices.push_back(deskewed_scan_->points.size());
 
   this->scan_stamp = timestamps[0];

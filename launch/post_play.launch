@@ -13,7 +13,7 @@
 <launch>
 
   <!-- To disable all the effect of rosbag reading, set this as "" -->
-  <arg name="replayed_bag" default="$(find direct_lidar_inertial_odometry)/data/dlio_replayed.bag"/>
+  <arg name="replayed_bag" default="/media/tutuna/LaCie/to_elliot/dlio_replayed.bag"/>
 
   <!-- Delay rosbag play. -->
   <arg name="play_start_delay" default="2"/>

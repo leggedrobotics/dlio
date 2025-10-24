@@ -17,7 +17,7 @@ dlio:
   save_replayed_bag: true
   # If keyframing is enabled, frames will be skipped.
   enable_keyframing: true
-  enabling_publishing: false
+  enabling_publishing: true
 
   adaptive: true
   pointcloud:
