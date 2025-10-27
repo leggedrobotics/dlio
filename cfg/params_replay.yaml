@@ -30,7 +30,7 @@ dlio:
   odom:
 
     gravity: 9.80665
-    computeTimeOffset: true
+    computeTimeOffset: false
 
     imu:
       approximateGravity: true
@@ -44,7 +44,7 @@ dlio:
       cropBoxFilter:
         size: 1.0
       voxelFilter:
-        res: 0.1
+        res: 0.01
 
     keyframe:
       threshD: 0.02
@@ -56,12 +56,12 @@ dlio:
         kcv: 10
         kcc: 10
     gicp:
-      minNumPoints: 64
-      kCorrespondences: 32
-      maxCorrespondenceDistance: 0.5
-      maxIterations: 32
-      transformationEpsilon: 0.008
-      rotationEpsilon: 0.005
+      minNumPoints: 128
+      kCorrespondences: 64
+      maxCorrespondenceDistance: 0.1
+      maxIterations: 64
+      transformationEpsilon: 0.005
+      rotationEpsilon: 0.004
       initLambdaFactor: 1e-9
 
     geo:

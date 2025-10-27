@@ -14,12 +14,12 @@
   <!-- Input topics. Is rosbag is provided, frame names / calibration / rates will be read automatically. -->
 
   <!-- Options -->
-  <arg name="pointcloud_topic" default="/boxi/livox/points"/> 
-  <!-- <arg name="pointcloud_topic" default="/boxi/livox/points"/> -->
+  <arg name="pointcloud_topic" default="/boxi/hesai/points"/> 
+  <!-- <arg name="pointcloud_topic" default="/boxi/livox/points /boxi/hesai/points    /anymal/velodyne/points"/> -->
 
   <arg name="imu_topic" default="/boxi/cpt7/imu"/>
 
-  <!-- Time offset to IMU for abliations , in micro seconds -->
+  <!-- Time offset to IMU for abliations , in micro seconds /boxi/cpt7/imu  /anymal/imu -->
   <arg name="abliation_time_offset" default="0.0"/>
 
   <!-- Translation offset to IMU for abliations , in millimeters -->
@@ -116,5 +116,5 @@
   <node pkg="rviz" type="rviz" name="dlio_rviz" args="-d $(find direct_lidar_inertial_odometry)/launch/dlio.rviz" if="$(arg rviz)"/>
   
     <!-- Rosbag play -->
-  <node pkg="rosbag" type="play" name="player" output="screen" launch-prefix="bash -c 'sleep $(arg play_start_delay); $0 $@' xterm -bg lightblue -fg darkslategrey -bd plum -bw 10 -geometry 80x40-50+250 -fn -sony-fixed-medium-r-normal--24-170-100-100-c-120-iso8859-1 -e " args="--clock -r 1 -s 0 -d 1 $(arg input_rosbag_path)"/>
+  <node pkg="rosbag" type="play" name="player" output="screen" launch-prefix="bash -c 'sleep $(arg play_start_delay); $0 $@' xterm -bg lightblue -fg darkslategrey -bd plum -bw 10 -geometry 80x40-50+250 -fn -sony-fixed-medium-r-normal--24-170-100-100-c-120-iso8859-1 -e " args="--clock -r 1 -s 0 -d 1 /tf:=/tf_old $(arg input_rosbag_path)"/>
 </launch>
